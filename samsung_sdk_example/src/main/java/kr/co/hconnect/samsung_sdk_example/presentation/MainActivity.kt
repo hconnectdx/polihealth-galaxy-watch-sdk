@@ -46,6 +46,7 @@ import androidx.wear.compose.material.Text
 import androidx.wear.compose.material.TimeText
 import kr.co.hconnect.samsung_sdk.SamsungHealthSdk
 import kr.co.hconnect.samsung_sdk.data.SdkTrackingState
+import kr.co.hconnect.samsung_sdk.proto.SensorBufferProto
 import kr.co.hconnect.samsung_sdk.proto.SensorType
 import kr.co.hconnect.samsung_sdk_example.presentation.theme.SamsungSDKTheme
 import java.text.SimpleDateFormat
@@ -147,7 +148,7 @@ class MainActivity : ComponentActivity() {
         }
 
         SamsungHealthSdk.init { data ->
-            addLog("[콜백] 데이터 수신 ${data.size}B", LogLevel.DATA)
+            logSensorData(data)
             true
         }
 
@@ -164,8 +165,8 @@ class MainActivity : ComponentActivity() {
 
     private fun startOnDemandPpg25() {
         if (!checkInit()) return
-        val types = setOf(SensorType.ACC, SensorType.PPG_GREEN_25)
-        addLog("온디맨드 시작: ACC + PPG25", LogLevel.INFO)
+        val types = setOf(SensorType.ECG, SensorType.PPG_GREEN_25, SensorType.PPG_IR_25, SensorType.PPG_RED_25)
+        addLog("온디맨드 시작: ECG + PPG25", LogLevel.INFO)
         SamsungHealthSdk.startOnDemandTracking(this, types)
     }
 
@@ -217,6 +218,29 @@ class MainActivity : ComponentActivity() {
             return false
         }
         return true
+    }
+
+    private fun logSensorData(data: ByteArray) {
+        try {
+            val proto = SensorBufferProto.parseFrom(data)
+            if (proto.samplesList.isEmpty()) {
+                Log.d(TAG, "[상태] ${proto.metadata.trackingState}")
+                return
+            }
+            proto.samplesList.groupBy { it.sensorType }.forEach { (type, list) ->
+                val first = list.first()
+                val summary = when (type) {
+                    SensorType.ACC -> first.acc25Data.let { "x=${it.x} y=${it.y} z=${it.z}" }
+                    SensorType.ECG -> first.ecgData.let { "value=${it.value} leadOff=${it.leadOff}" }
+                    SensorType.PPG_GREEN_25 -> first.ppgGreen25Data.let { "green=${it.green25} ir=${it.ir25} red=${it.red25}" }
+                    SensorType.PPG_GREEN_100 -> first.ppgGreen100Data.let { "green=${it.green100} ir=${it.ir100} red=${it.red100}" }
+                    else -> "-"
+                }
+                Log.d(TAG, "[$type] ${list.size}건 첫샘플: $summary")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "[콜백] 파싱 실패 (${data.size}B): ${e.message}", e)
+        }
     }
 
     private fun addLog(message: String, level: LogLevel = LogLevel.INFO) {

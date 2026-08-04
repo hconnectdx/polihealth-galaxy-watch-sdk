@@ -3,6 +3,7 @@ package kr.co.hconnect.samsung_sdk.tracker
 import android.content.Context
 import android.util.Log
 import com.samsung.android.service.health.tracking.HealthTrackingService
+import com.samsung.android.service.health.tracking.data.PpgType
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -70,8 +71,11 @@ class HealthTrackerProcessorImpl(
             return ((totalSeconds * fs) / batch).toInt()
         }
 
+        // IR/RED 전용 타입은 채널 선택을 위한 요청 플래그일 뿐, 실제 배치는 항상
+        // PPG_GREEN_25/PPG_GREEN_100 태그로 나오므로 배치 목표 계산에서는 제외한다.
         val expectedByType: Map<SensorType, Int> =
-            selected.associateWith { expectedBatchesFor(it) }
+            selected.filterNot { it in PPG_CHANNEL_ONLY_TYPES }
+                .associateWith { expectedBatchesFor(it) }
 
         SensorBufferStorage.resetFlushedBatchCounts()
         healthTrackerManager.resetBatchCounters()
@@ -102,11 +106,11 @@ class HealthTrackerProcessorImpl(
                 if (SensorType.ACC in measurementType) {
                     healthTrackerManager.startACCTracking(service, context) { }
                 }
-                if (SensorType.PPG_GREEN_25 in measurementType) {
-                    healthTrackerManager.startPPG25Tracking(service, context) { }
+                if (PPG25_CHANNEL_TYPES.keys.any { it in measurementType }) {
+                    healthTrackerManager.startPPG25Tracking(service, context, ppg25ChannelsFor(measurementType)) { }
                 }
-                if (SensorType.PPG_GREEN_100 in measurementType) {
-                    healthTrackerManager.startPPG100Tracking(service, context) { }
+                if (PPG100_CHANNEL_TYPES.keys.any { it in measurementType }) {
+                    healthTrackerManager.startPPG100Tracking(service, context, ppg100ChannelsFor(measurementType)) { }
                 }
 
                 delay(adjustedDurationMillis)
@@ -119,6 +123,12 @@ class HealthTrackerProcessorImpl(
             }
         }
     }
+
+    private fun ppg25ChannelsFor(measurementType: Set<SensorType>): Set<PpgType> =
+        PPG25_CHANNEL_TYPES.filterKeys { it in measurementType }.values.toSet()
+
+    private fun ppg100ChannelsFor(measurementType: Set<SensorType>): Set<PpgType> =
+        PPG100_CHANNEL_TYPES.filterKeys { it in measurementType }.values.toSet()
 
     private fun finishBatchCounting(expectedByType: Map<SensorType, Int>) {
         val result = expectedByType.mapValues { (t, _) ->
@@ -159,11 +169,11 @@ class HealthTrackerProcessorImpl(
                 if (SensorType.ACC in measurementType) {
                     healthTrackerManager.startACCTracking(service, context) { }
                 }
-                if (SensorType.PPG_GREEN_25 in selected) {
-                    healthTrackerManager.startPPG25Tracking(service, context) { }
+                if (PPG25_CHANNEL_TYPES.keys.any { it in selected }) {
+                    healthTrackerManager.startPPG25Tracking(service, context, ppg25ChannelsFor(selected)) { }
                 }
-                if (SensorType.PPG_GREEN_100 in selected) {
-                    healthTrackerManager.startPPG100Tracking(service, context) { }
+                if (PPG100_CHANNEL_TYPES.keys.any { it in selected }) {
+                    healthTrackerManager.startPPG100Tracking(service, context, ppg100ChannelsFor(selected)) { }
                 }
                 if (SensorType.ECG in selected) {
                     delay(5_000L)
@@ -233,5 +243,23 @@ class HealthTrackerProcessorImpl(
 
     companion object {
         private const val TAG = "TrackerProcessorImpl"
+
+        private val PPG25_CHANNEL_TYPES = mapOf(
+            SensorType.PPG_GREEN_25 to PpgType.GREEN,
+            SensorType.PPG_IR_25 to PpgType.IR,
+            SensorType.PPG_RED_25 to PpgType.RED
+        )
+
+        private val PPG100_CHANNEL_TYPES = mapOf(
+            SensorType.PPG_GREEN_100 to PpgType.GREEN,
+            SensorType.PPG_100_IR to PpgType.IR,
+            SensorType.PPG_100_RED to PpgType.RED
+        )
+
+        // IR/RED 전용 요청 플래그 — 실제 배치는 항상 PPG_GREEN_25/PPG_GREEN_100 태그로 나온다.
+        private val PPG_CHANNEL_ONLY_TYPES = setOf(
+            SensorType.PPG_IR_25, SensorType.PPG_RED_25,
+            SensorType.PPG_100_IR, SensorType.PPG_100_RED
+        )
     }
 }

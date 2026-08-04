@@ -81,6 +81,7 @@ class TrackingService : Service() {
                 }
             }
 
+
             ACTION_START_ON_DEMAND -> {
                 startForegroundService()
                 wakeLock.acquire()

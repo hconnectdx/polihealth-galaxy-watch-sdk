@@ -9,6 +9,10 @@ enum SensorType {
   PPG_GREEN_25 = 2;
   PPG_GREEN_100 = 3;
   UNKNOWN = 4;
+  PPG_IR_25 = 5;
+  PPG_RED_25 = 6;
+  PPG_100_IR = 7;
+  PPG_100_RED = 8;
 }
 
 enum TrackingState {

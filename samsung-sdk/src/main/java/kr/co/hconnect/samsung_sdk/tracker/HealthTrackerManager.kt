@@ -75,28 +75,31 @@ class HealthTrackerManager : TrackerManager {
     override fun startPPG25Tracking(
         service: HealthTrackingService,
         appContext: Context,
+        channels: Set<PpgType>,
         onDataReceived: (List<PPGGreen25Data>) -> Unit
     ) {
         ppg25Tracker = service.getHealthTracker(
             HealthTrackerType.PPG_CONTINUOUS,
-            setOf(PpgType.GREEN, PpgType.IR, PpgType.RED)
+            channels
         )
 
         val listener = object : HealthTracker.TrackerEventListener {
             override fun onDataReceived(dataPoints: MutableList<DataPoint>) {
                 val samples = ArrayList<SensorSamples>(dataPoints.size)
                 for (dp in dataPoints) {
+                    val ppgBuilder = PpgGreen25.newBuilder()
+                        .setTimestamp(dp.timestamp)
+                        .setGreen25(dp.getValue(ValueKey.PpgSet.PPG_GREEN))
+                    if (PpgType.IR in channels) {
+                        ppgBuilder.setIr25(dp.getValue(ValueKey.PpgSet.PPG_IR))
+                    }
+                    if (PpgType.RED in channels) {
+                        ppgBuilder.setRed25(dp.getValue(ValueKey.PpgSet.PPG_RED))
+                    }
                     samples.add(
                         SensorSamples.newBuilder()
                             .setSensorType(SensorType.PPG_GREEN_25)
-                            .setPpgGreen25Data(
-                                PpgGreen25.newBuilder()
-                                    .setTimestamp(dp.timestamp)
-                                    .setGreen25(dp.getValue(ValueKey.PpgSet.PPG_GREEN))
-                                    .setIr25(dp.getValue(ValueKey.PpgSet.PPG_IR))
-                                    .setRed25(dp.getValue(ValueKey.PpgSet.PPG_RED))
-                                    .build()
-                            )
+                            .setPpgGreen25Data(ppgBuilder.build())
                             .build()
                     )
                 }
@@ -150,28 +153,31 @@ class HealthTrackerManager : TrackerManager {
     override fun startPPG100Tracking(
         service: HealthTrackingService,
         appContext: Context,
+        channels: Set<PpgType>,
         onDataReceived: (List<PPGGreen100Data>) -> Unit
     ) {
         ppg100Tracker = service.getHealthTracker(
             HealthTrackerType.PPG_ON_DEMAND,
-            setOf(PpgType.GREEN, PpgType.IR, PpgType.RED)
+            channels
         )
 
         val listener = object : HealthTracker.TrackerEventListener {
             override fun onDataReceived(dataPoints: MutableList<DataPoint>) {
                 val samples = ArrayList<SensorSamples>(dataPoints.size)
                 for (dp in dataPoints) {
+                    val ppgBuilder = PpgGreen100.newBuilder()
+                        .setTimestamp(dp.timestamp)
+                        .setGreen100(dp.getValue(ValueKey.PpgSet.PPG_GREEN))
+                    if (PpgType.IR in channels) {
+                        ppgBuilder.setIr100(dp.getValue(ValueKey.PpgSet.PPG_IR))
+                    }
+                    if (PpgType.RED in channels) {
+                        ppgBuilder.setRed100(dp.getValue(ValueKey.PpgSet.PPG_RED))
+                    }
                     samples.add(
                         SensorSamples.newBuilder()
                             .setSensorType(SensorType.PPG_GREEN_100)
-                            .setPpgGreen100Data(
-                                PpgGreen100.newBuilder()
-                                    .setTimestamp(dp.timestamp)
-                                    .setGreen100(dp.getValue(ValueKey.PpgSet.PPG_GREEN))
-                                    .setIr100(dp.getValue(ValueKey.PpgSet.PPG_IR))
-                                    .setRed100(dp.getValue(ValueKey.PpgSet.PPG_RED))
-                                    .build()
-                            )
+                            .setPpgGreen100Data(ppgBuilder.build())
                             .build()
                     )
                 }
