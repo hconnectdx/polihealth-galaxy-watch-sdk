@@ -1,13 +1,9 @@
 package kr.co.hconnect.samsung_server_sdk_example
 
 import android.Manifest
-import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.os.Environment
-import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -79,7 +75,6 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         requestPermissions()
-        requestAllFilesAccessIfNeeded()
 
         setContent {
             SamsungSDKTheme {
@@ -284,24 +279,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /**
-     * Android 11+ : `Download/` 등 공용 폴더에 CSV 를 쓰려면 "모든 파일 액세스"(MANAGE_EXTERNAL_STORAGE) 권한이 필요하다.
-     * 일반 런타임 권한과 달리 시스템 설정 화면을 열어 사용자가 직접 토글해야 한다.
-     */
-    private fun requestAllFilesAccessIfNeeded() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
-        if (Environment.isExternalStorageManager()) return
-
-        appendLog("모든 파일 액세스 권한이 필요합니다. 설정 화면에서 허용해 주세요.")
-        runCatching {
-            val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
-                data = Uri.parse("package:$packageName")
-            }
-            startActivity(intent)
-        }.onFailure {
-            startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
-        }
-    }
 }
 
 // ── Compose UI ───────────────────────────────────────────────────────────────

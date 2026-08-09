@@ -71,7 +71,7 @@ SamsungServerSdk (object)
 ## DataWriter 저장 경로
 
 ```
-Download/SamsungServerSdk/           ← MANAGE_EXTERNAL_STORAGE 권한 있을 때
+Android/data/{packageName}/files/SamsungServerSdk/   ← 앱 전용 외부 저장소, 권한 불필요
   └── 2026-04-29/
       └── 15_30_00/
           ├── ACC.csv         (x,y,z) - timestamp 제거
@@ -80,8 +80,8 @@ Download/SamsungServerSdk/           ← MANAGE_EXTERNAL_STORAGE 권한 있을 �
           └── PPG_GREEN_100.csv (green,ir,red)
 ```
 
-권한 없으면 앱 전용 외부 저장소 → 앱 내부 저장소 순으로 fallback.
-`MANAGE_EXTERNAL_STORAGE` 요청은 예제 앱에서 처리.
+외부 저장소가 마운트되지 않은 경우에만 앱 내부 저장소(`filesDir`)로 fallback.
+Play 정책상 심사가 까다로운 `MANAGE_EXTERNAL_STORAGE`(전체 파일 접근) 권한은 사용하지 않는다 — 공용 `Download/` 폴더에는 쓰지 않는다.
 
 ## HealthOnClient 주의사항
 

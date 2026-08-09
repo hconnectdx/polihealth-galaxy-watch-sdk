@@ -1,7 +1,6 @@
 package kr.co.hconnect.samsung_server_sdk.write
 
 import android.content.Context
-import android.os.Environment
 import android.util.Log
 import kr.co.hconnect.samsung_server_sdk.proto.SensorSamples
 import kr.co.hconnect.samsung_server_sdk.proto.SensorType
@@ -20,7 +19,7 @@ private const val ROOT_DIR = "SamsungServerSdk"
  *
  * ## 폴더 구조
  * ```
- * Download/SamsungServerSdk/
+ * Android/data/{packageName}/files/SamsungServerSdk/
  *   └── 2026-04-29/
  *       └── 15_30_00/
  *           ├── ACC.csv
@@ -29,9 +28,8 @@ private const val ROOT_DIR = "SamsungServerSdk"
  *           └── PPG_GREEN_100.csv
  * ```
  *
- * Android 11+ 에서 공용 `Download/` 폴더에 쓰려면 `MANAGE_EXTERNAL_STORAGE`
- * 권한이 필요하다 (예제 앱에서 설정 화면을 통해 사용자에게 요청).
- * 권한이 없으면 자동으로 앱 전용 외부 저장소로 fallback 한다.
+ * 앱 전용 외부 저장소를 사용하므로 별도 저장소 권한이 필요 없다.
+ * 외부 저장소가 마운트되지 않은 경우 앱 내부 저장소로 fallback 한다.
  */
 internal class DataWriter(private val context: Context) {
 
@@ -160,38 +158,16 @@ internal class DataWriter(private val context: Context) {
     // ── 저장 경로 결정 ───────────────────────────────────────────────────────
 
     private fun resolveBaseDir(): File {
-        // 1순위: 공용 Download/SamsungServerSdk (사용자가 파일관리자로 접근 가능)
-        //   - Android 11+ : MANAGE_EXTERNAL_STORAGE 권한 필요
-        //   - Android 10- : WRITE_EXTERNAL_STORAGE 권한 필요
-        if (hasAllFilesAccess()) {
-            val downloadDir = Environment.getExternalStoragePublicDirectory(
-                Environment.DIRECTORY_DOWNLOADS
-            )
-            val dir = File(downloadDir, ROOT_DIR)
-            if (dir.exists() || dir.mkdirs()) return dir
-            Log.w(TAG, "Download 폴더 생성 실패 → 앱 전용 저장소로 fallback")
-        } else {
-            Log.w(TAG, "MANAGE_EXTERNAL_STORAGE 권한 없음 → 앱 전용 저장소로 fallback")
-        }
-
-        // 2순위: 앱 전용 외부 저장소 — 권한 불필요
+        // 1순위: 앱 전용 외부 저장소 — 권한 불필요
         //   경로: /storage/emulated/0/Android/data/{packageName}/files/SamsungServerSdk
         val externalDir = context.getExternalFilesDir(null)
         if (externalDir != null) {
             val dir = File(externalDir, ROOT_DIR)
             if (dir.exists() || dir.mkdirs()) return dir
+            Log.w(TAG, "앱 전용 외부 저장소 폴더 생성 실패 → 앱 내부 저장소로 fallback")
         }
 
-        // 3순위: 앱 내부 저장소 (외부 저장소 마운트 안된 경우)
+        // 2순위: 앱 내부 저장소 (외부 저장소 마운트 안된 경우)
         return File(context.filesDir, ROOT_DIR).also { it.mkdirs() }
-    }
-
-    private fun hasAllFilesAccess(): Boolean {
-        return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-            Environment.isExternalStorageManager()
-        } else {
-            // Android 10 이하 - WRITE_EXTERNAL_STORAGE 권한 체크는 호출 측에서 보장
-            true
-        }
     }
 }
