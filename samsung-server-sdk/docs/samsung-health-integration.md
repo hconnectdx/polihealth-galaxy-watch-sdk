@@ -225,31 +225,160 @@ class StepsSamsungManager(private val store: HealthDataStore) {
 ```
 
 
-## 8. 걸음 수 (Steps) — `aggregateData` 예시
+## 8. 심박수 (Heart Rate) — `readData` 예시
 
-## 8. 걸음 수 (Steps) — `aggregateData` 예시
+```kotlin
+class HeartRateSamsungManager(private val store: HealthDataStore) {
 
-## 7. 에러 / 예외 상황 처리
 
-- 삼성헬스 앱이 설치되어 있지 않은 경우
-- 삼성헬스 앱 버전이 낮아 SDK 요구사항을 만족하지 못하는 경우
-- 사용자가 권한을 거부한 경우
-- 네트워크/동기화 지연으로 데이터가 아직 반영되지 않은 경우
-- 그 외 SDK에서 발생했던 예외와 대응 방법 (실제로 겪었던 에러 메시지를 그대로 남겨두면 검색하기 좋습니다)
+    private suspend fun readHeartRateData(
+        startInstant: Instant,
+        endInstant: Instant
+    ): List<Map<String, Any>>? {
+        val request = DataTypes.HEART_RATE.readDataRequestBuilder
+            .setInstantTimeFilter(InstantTimeFilter.of(startInstant, endInstant))
+            .build()
 
-## 8. 테스트 방법
+
+        val response = store.readData(request)
+        if (response.dataList.isEmpty()) return null
+
+
+        return response.dataList.map { point ->
+            val bpm = (point.getValue(DataType.HeartRateType.HEART_RATE) as? Float)?.toInt()
+            val minBpm = (point.getValue(DataType.HeartRateType.MIN_HEART_RATE) as? Float)?.toInt()
+            val maxBpm = (point.getValue(DataType.HeartRateType.MAX_HEART_RATE) as? Float)?.toInt()
+
+
+            buildMap<String, Any> {
+                put("date", point.startTime.toString())
+                bpm?.let { put("bpm", it) }
+                minBpm?.let { put("minBpm", it) }
+                maxBpm?.let { put("maxBpm", it) }
+            }
+        }
+    }
+}
+```
+
+## 8. 혈중 산소포화도 (Blood Oxygen) — `readData` 예시
+
+```kotlin
+class BloodOxygenSamsungManager(private val store: HealthDataStore) {
+
+
+    private suspend fun readBloodOxygenData(
+        startInstant: Instant,
+        endInstant: Instant
+    ): List<Map<String, Any>>? {
+        val request = DataTypes.BLOOD_OXYGEN.readDataRequestBuilder
+            .setInstantTimeFilter(InstantTimeFilter.of(startInstant, endInstant))
+            .build()
+
+
+        val response = store.readData(request)
+        if (response.dataList.isEmpty()) return null
+
+
+        return response.dataList.map { point ->
+            val value = (point.getValue(DataType.BloodOxygenType.OXYGEN_SATURATION) as? Float)?.toDouble()
+            val minValue = (point.getValue(DataType.BloodOxygenType.MIN_OXYGEN_SATURATION) as? Float)?.toDouble()
+            val maxValue = (point.getValue(DataType.BloodOxygenType.MAX_OXYGEN_SATURATION) as? Float)?.toDouble()
+
+
+            buildMap<String, Any> {
+                put("date", point.startTime.toString())
+                value?.let { put("value", it) }
+                minValue?.let { put("minValue", it) }
+                maxValue?.let { put("maxValue", it) }
+            }
+        }
+    }
+}
+```
+
+
+
+## 9. `getValue()` 반환 타입 — 실측 기반 주의사항
+
+
+`DataPoint.getValue(field)`는 필드 타입에 따라 안전한 캐스팅이 필요하다. 문서상 타입과
+실측이 다른 경우가 있었으므로 **반드시 실기기에서 로그로 실제 런타임 타입을 확인**할 것.
+
+
+- `Float` 필드(대부분의 수치형: `HEART_RATE`, `OXYGEN_SATURATION`, `SYSTOLIC` 등) →
+  `as? Float` 캐스팅. `as? Double`로 캐스팅하면 무조건 실패해서 값이 **조용히 드롭**된다.
+- 실제로 겪은 버그: `DataType.BloodGlucoseType.GLUCOSE_LEVEL`을 문서 가정대로
+  `List<BloodGlucose>`로 캐스팅했는데, 실기기 응답은 **단일 `Float`**(mmol/L)였다.
+  `is List<*>` 캐스팅이 항상 실패해 혈당 데이터가 전량 드롭되는 버그로 이어졌다.
+  → 방어 코드로 `when (rawValue) { is Number -> ...; is List<*> -> ...; else -> emptyList() }`
+  형태로 두 케이스를 모두 처리하는 것을 권장.
+- `Int` 필드(`PULSE_RATE` 등)는 `as? Int`.
+
+
+```kotlin
+val rawGlucose = point.getValue(DataType.BloodGlucoseType.GLUCOSE_LEVEL)
+when (rawGlucose) {
+    is Number -> rawGlucose.toDouble()          // 실측: 단일 Float로 온다
+    is List<*> -> rawGlucose /* BloodGlucose 리스트 케이스 방어 */
+    else -> null
+}
+```
+
+
+---
+
+
+## 10. 공용 유틸 (원본에서 사용한 확장 함수)
+
+
+원본에서는 시각을 `"yyyyMMddHHmmssXXX"`(타임존 오프셋 포함) 문자열로 통일해서 내려준다.
+필요 시 대상 프로젝트의 날짜 포맷 규칙에 맞게 교체하면 된다.
+
+
+```kotlin
+private val dateFormatter = DateTimeFormatter.ofPattern("yyyyMMddHHmmss")
+
+
+fun Instant.toFormattedString(): String {
+    val zonedDateTime = this.atZone(ZoneId.systemDefault())
+    return "${zonedDateTime.format(dateFormatter)}${zonedDateTime.offset}"
+}
+
+
+fun LocalDateTime.toFormattedString(): String {
+    val zoneId = ZoneId.systemDefault()
+    return "${this.format(dateFormatter)}${zoneId.rules.getOffset(this)}"
+}
+
+
+fun Double.toTwoDecimalPlace(): Double = String.format("%.2f", this).toDouble()
+```
+
+
+---
+
+## 11. 걸음수 서버 전송 규격
+
+## 12. 심박수 서버 전송 규격
+
+## 13. 산소 포화도 서버 전송 규격
+
+## 14. 
+
+## 12. 테스트 방법
 
 - Samsung Health SDK는 실제 삼성 기기 + 삼성헬스 앱 설치가 필요합니다
 - 테스트용 실기기에 삼성헬스 계정으로 로그인되어 있어야함.
 - 수동 테스트 이고 samsung-server-sdk-example에 검을수, 심박수, 산소포화도, 피부온도 정보를 가져와서 표시하는 화면 추가 필요.
 
-## 9. 알려진 이슈 / 트러블슈팅
+## 13. 알려진 이슈 / 트러블슈팅
 
 | 증상 | 원인 | 해결 방법 |
 |---|---|---|
 | | | |
 
-## 10. 버전 변경 이력
+## 14. 버전 변경 이력
 
 SDK 버전을 올리거나 지원 데이터 타입을 바꿀 때마다 이 표에 기록해두면, 다음 버전업 때 "저번엔 뭘 고쳤었지?"를 바로 확인할 수 있습니다.
 
@@ -257,7 +386,7 @@ SDK 버전을 올리거나 지원 데이터 타입을 바꿀 때마다 이 표�
 |---|---|---|---|
 | | | | |
 
-## 11. 참고 자료
+## 15. 참고 자료
 
 - 삼성헬스 Data SDK 공식 문서 링크 : https://developer.samsung.com/health/data/overview.html
 링크
