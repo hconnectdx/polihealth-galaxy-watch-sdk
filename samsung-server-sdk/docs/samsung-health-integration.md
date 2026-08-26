@@ -8,9 +8,9 @@
 
 ## 1. 개요
 
-- samsung-server-sdk 를 이용하는 앱에서 요청을 하면 삼성헬스 Data SDK를 이용해서 삼성헬스 앱에 저장된 걸음수, 심박수, 산소포화도, 피부온도를 가져와서 SamsungServerSdk.init의 API url 즉 폴리헬스 서버로 데이타를 저장하는 기능을 추가한다.
+- samsung-server-sdk 를 이용하는 앱에서 요청을 하면 삼성헬스 Data SDK를 이용해서 삼성헬스 앱에 저장된 걸음수, 심박수, 산소포화도, 피부온도를 가져온다.
 - 연동 범위: 걸음수, 심박수, 산소포화도, 피부온도
-- 연동 범위가 아닌 것: 혈압, 스트레스, 혈당변이도, 수면 데이터는 samsung-sdk 를 이용해서 수집한 ECG, PPG, ACC 데이타를 BLE로 전송하고 polihealth-android 앱에서 samsung-server-sdk가 데이타를 파일로 저장한 후 polihealth 파일을 전송하면 혈압, 스트레스, 혈당 변이도, 수면 점수 등을 알려준다. 
+- 연동 범위가 아닌 것: 걸음수, 심박수, 산소포화도, 피부온도 제외한 값은 연동 범위가 아님.
 
 ## 2. 전제조건 / 요구사항
 
@@ -22,8 +22,10 @@
 ## 3. 아키텍처 개요
 
 - samsung-sdk와 동일하게 samsung-health-data-api-1.1.0.aar파일은 별도 maven 저장소에서 받아 오지 않고 samsung-server-sdk.aar에 포함시킴.
-- 이 라이브러리를 사용하는 앱에서 삼성헬스 데이타 읽기 권한이 있는지 여부를 확인하는 함수와 권한이 없을 경우 삼성헬스 권한을 요청하는 함수를 구현
-- sync 함수를 호출하면 비동기로 걸음수, 산소포화도, 피부온도는 과거 30일치 데이타를 폴리헬스 서버로 전송하고 심박수의 경우 최초 1 호출시에 30일치 데이타를 읽어와서 호출하고 이후에는 sync 호출 시간을 기록해두었다가 sync 호출된 시점 이후 데이타만 읽어와서 폴리헬스 서버로 전송하도록 구현
+- 이 라이브러리는 삼성헬스 데이타 읽기 권한이 있는지 여부를 확인하는 함수(checkPermission)와 권한이 없을 경우 삼성헬스 권한을 요청하는 함수를 구현(requestPermission) 해야 함
+- checkPermission에는 삼성기기 여부와 삼성헬스 앱 설치 여부도 판단해서 별도 예외 코드를 정의 필요
+
+
 
 ## 4. Gradle / 빌드 설정
 
@@ -38,12 +40,16 @@ Samsung Health Data API AAR은 Maven Central에 공개되어 있지 않고, 파�
 ### 4.1 로컬 Maven 레이아웃 구성
 
 ```
-<module>/libs/repo/com/samsung/android/sdk/health/health-data-api/1.1
-  ├── health-data-api-1.1.0.aar
-  └── health-data-api-1.1.0.pom
+<module>/libs/repo/com/samsung/android/sdk/health/samsung-health-data-api/1.1.0
+  ├── samsung-health-data-api-1.1.0.aar   ← 파트너가 배포하는 원본 파일명 그대로 (리네임 불필요)
+  └── samsung-health-data-api-1.1.0.pom
 ```
 
-`health-data-api-1.1.0.pom` (최소 pom):
+> ⚠️ 버전 디렉터리명(`1.1.0`)은 pom의 `<version>`과 정확히 일치해야 한다 — 다르면 Gradle이
+> `Could not find ....jar`로 GAV 좌표를 못 찾는다. artifactId도 파트너가 배포하는 실제 파일명
+> (`samsung-health-data-api`)과 pom/의존성 선언에서 반드시 동일하게 써야 한다.
+
+`samsung-health-data-api-1.1.0.pom` (최소 pom):
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -52,7 +58,7 @@ Samsung Health Data API AAR은 Maven Central에 공개되어 있지 않고, 파�
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http:/
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.samsung.android.sdk.health</groupId>
-    <artifactId>health-data-api</artifactId>
+    <artifactId>samsung-health-data-api</artifactId>
     <version>1.1.0</version>
     <packaging>aar</packaging>
 </project>
@@ -90,7 +96,7 @@ android {
 
 
 dependencies {
-    implementation 'com.samsung.android.sdk.health:health-data-api:1.
+    implementation 'com.samsung.android.sdk.health:samsung-health-data-api:1.1.0'
     // compileOnly 로 선언하면 실제 런타임에 클래스 못 찾음 — impleme
 }
 ```
@@ -358,35 +364,33 @@ fun Double.toTwoDecimalPlace(): Double = String.format("%.2f", this).toDouble()
 
 ---
 
-## 11. 걸음수 서버 전송 규격
 
-## 12. 심박수 서버 전송 규격
-
-## 13. 산소 포화도 서버 전송 규격
-
-## 14. 
-
-## 12. 테스트 방법
+## 11. 테스트 방법
 
 - Samsung Health SDK는 실제 삼성 기기 + 삼성헬스 앱 설치가 필요합니다
 - 테스트용 실기기에 삼성헬스 계정으로 로그인되어 있어야함.
 - 수동 테스트 이고 samsung-server-sdk-example에 검을수, 심박수, 산소포화도, 피부온도 정보를 가져와서 표시하는 화면 추가 필요.
 
-## 13. 알려진 이슈 / 트러블슈팅
+## 12. 알려진 이슈 / 트러블슈팅
 
 | 증상 | 원인 | 해결 방법 |
 |---|---|---|
-| | | |
+| `bundleDebugAar` 실패 (`repositories {}` 를 build.gradle.kts에 선언) | 이 repo의 `settings.gradle.kts`가 `repositoriesMode = FAIL_ON_PROJECT_REPOS`라, 4.2절 예시처럼 모듈 build.gradle.kts에 `rootProject.allprojects { repositories {...} }`를 쓰면 빌드가 막힌다 | 로컬 maven repo를 `settings.gradle.kts`의 `dependencyResolutionManagement.repositories`에 등록해야 한다 (`maven { url = uri(File(rootDir, "samsung-server-sdk/libs/repo")) }`) |
+| `Could not find samsung-health-data-api-1.1.0.jar` (aar→jar 변환 실패) | 로컬 maven repo에 `.pom`만 있고 실물 `.aar`가 없음, 또는 artifactId/버전 디렉터리명이 pom과 불일치 | 파트너가 배포한 원본 파일명(`samsung-health-data-api-1.1.0.aar`) 그대로 `samsung-server-sdk/libs/repo/com/samsung/android/sdk/health/samsung-health-data-api/1.1.0/`에 추가. artifactId는 반드시 `samsung-health-data-api`로 통일(짧게 `health-data-api`로 줄이면 실제 배포 파일명과 안 맞아 리네임이 필요해짐 — 처음에 이 실수로 한 번 헤맴) |
+| `Suspend function ... should be called only from a coroutine` | `HealthDataStore.readData()`/`aggregateData()`/`getGrantedPermissions()`/`requestPermissions()`는 모두 `suspend fun` — 이를 호출하는 내부 헬퍼 함수(`readOneDay` 등)도 반드시 `suspend`로 선언해야 함 | 호출 체인 전체를 `suspend fun`으로 선언하거나 `withContext`로 감쌀 것 |
+| samsung-server-sdk 를 쓰는 앱이 `minSdkVersion X cannot be smaller than Y` 오류 | 이 라이브러리의 minSdk를 24 → 29로 올리면(2절 요구사항), 이 라이브러리를 쓰는 모든 앱도 minSdk를 29 이상으로 올려야 한다 (AGP가 강제) | `samsung-server-sdk-example`도 함께 minSdk 29로 올림. 앱마다 실제로 Android 10 미만 지원이 필요 없는지 먼저 확인할 것 |
+| `ErrorCode.ERR_PLATFORM_NOT_INSTALLED` 등을 enum처럼 비교하면 타입 오류 | 실물 AAR의 `ErrorCode`는 enum이 아니라 `Int` 상수 모음이고, `HealthDataException.errorCode`도 `Int?`로 내려온다 (공식 가이드 문서 예시 코드가 enum처럼 보이게 축약되어 있어 헷갈리기 쉬움) | `when (errorCode: Int?) { ErrorCode.ERR_PLATFORM_NOT_INSTALLED -> ...; ... }` 형태로 비교할 것. 확실치 않은 API는 `.aar` 안의 `classes.jar`를 풀어 `javap -p`로 실제 시그니처를 확인하는 게 가장 빠르다 |
+| 실기기에서 `readData()`류 호출 시 `NoClassDefFoundError: com.google.gson.GsonBuilder` (권한은 다 승인했는데도 발생) | `samsung-health-data-api` 내부적으로 Gson에 의존하는데(`ReadDataRequest.writeToParcel` 등), 우리가 로컬 maven repo용으로 직접 작성한 최소 pom에는 `<dependencies>`가 없어 이 전이 의존성이 전혀 선언돼 있지 않았음. ART가 한 번 클래스 초기화에 실패하면 그 프로세스 생명주기 동안 해당 클래스를 "이미 실패함"으로 캐싱해버려서, 이후 어떤 데이터 타입으로 재시도해도 (걸음수/심박수 포함) 같은 에러가 반복될 수 있음 | `samsung-server-sdk/build.gradle.kts`에 `implementation(libs.gson)`을 명시적으로 추가. 파트너 AAR을 우리가 만든 자체 pom으로 감쌀 때는, 그 AAR이 실제로 어떤 서드파티에 의존하는지 `classes.jar`를 풀어 `strings`로 훑어봐야 안전함(`cat $(find . -name '*.class') \| strings -a \| grep -E '^(com/google/\|okhttp3/\|retrofit2/)'` 형태) |
 
-## 14. 버전 변경 이력
+## 13. 버전 변경 이력
 
 SDK 버전을 올리거나 지원 데이터 타입을 바꿀 때마다 이 표에 기록해두면, 다음 버전업 때 "저번엔 뭘 고쳤었지?"를 바로 확인할 수 있습니다.
 
 | 날짜 | SDK 버전 | 변경 내용 | 관련 PR/이슈 |
 |---|---|---|---|
-| | | | |
+| 2026-08-26 | 1.1.0 | 최초 연동. `checkHealthDataPermission`/`requestHealthDataPermission`/`readHealthDataSteps`/`readHealthDataHeartRate`/`readHealthDataBloodOxygen`/`readHealthDataSkinTemperature`를 `SamsungServerSdk`에 추가 (`health/` 패키지). samsung-server-sdk 모듈 minSdk 24→29 상향. 로컬 maven repo(`libs/repo`)에 실물 `samsung-health-data-api-1.1.0.aar` 추가 후 실제 컴파일/빌드 성공 확인(`javap`로 실제 API 시그니처 검증, `ErrorCode` Int 타입 이슈 수정) | - |
 
-## 15. 참고 자료
+## 14. 참고 자료
 
 - 삼성헬스 Data SDK 공식 문서 링크 : https://developer.samsung.com/health/data/overview.html
 링크

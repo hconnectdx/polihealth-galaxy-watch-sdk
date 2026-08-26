@@ -19,6 +19,13 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
+    <!-- Samsung Health Data SDK: 삼성헬스 앱 설치 여부 확인(PackageManager#getPackageInfo)에 필요.
+         Android 11(API 30)+ 패키지 가시성 정책상 <queries> 미선언 시 항상 미설치로 보인다. -->
+    <queries>
+        <package android:name="com.sec.android.app.shealth" />
+        <package android:name="com.samsung.android.wear.shealth" />
+    </queries>
+
     <application>
         <service
             android:name=".service.WatchReceiverService"

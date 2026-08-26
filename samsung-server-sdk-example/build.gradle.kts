@@ -10,7 +10,7 @@ android {
 
     defaultConfig {
         applicationId = "kr.co.hconnect.samsung_server_sdk_example"
-        minSdk = 24
+        minSdk = 29 // samsung-server-sdk 의 minSdk(Samsung Health Data SDK 요구사항)에 맞춤
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
