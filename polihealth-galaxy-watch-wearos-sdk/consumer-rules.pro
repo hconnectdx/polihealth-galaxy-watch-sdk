@@ -1,0 +1,4 @@
+-keep class com.google.protobuf.** { *; }
+-keep class kr.co.hconnect.polihealth_galaxy_watch_wearos_sdk.proto.** { *; }
+-keepclassmembers class * extends com.google.protobuf.GeneratedMessageLite { *; }
+-keep class com.samsung.android.service.health.tracking.** { *; }
