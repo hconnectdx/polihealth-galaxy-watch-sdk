@@ -32,11 +32,8 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
@@ -80,26 +77,19 @@ class MainActivity : ComponentActivity() {
         requestPermissions()
 
         setContent {
-            var showHealthDataScreen by remember { mutableStateOf(false) }
-
             PolihealthGalaxyWatchSdkTheme {
-                if (showHealthDataScreen) {
-                    HealthDataScreen(onBack = { showHealthDataScreen = false })
-                } else {
-                    MainScreen(
-                        logs = logs,
-                        connectionState = connectionState.value,
-                        sessionState = sessionState.value,
-                        storagePath = storagePath.value,
-                        isRunning = isRunning.value,
-                        isInitialized = isInitialized.value,
-                        onInitSdk = ::initSdk,
-                        onStart = ::startService,
-                        onStop = ::stopService,
-                        onClearLog = ::clearLog,
-                        onOpenHealthData = { showHealthDataScreen = true },
-                    )
-                }
+                MainScreen(
+                    logs = logs,
+                    connectionState = connectionState.value,
+                    sessionState = sessionState.value,
+                    storagePath = storagePath.value,
+                    isRunning = isRunning.value,
+                    isInitialized = isInitialized.value,
+                    onInitSdk = ::initSdk,
+                    onStart = ::startService,
+                    onStop = ::stopService,
+                    onClearLog = ::clearLog,
+                )
             }
         }
     }
@@ -306,7 +296,6 @@ fun MainScreen(
     onStart: () -> Unit,
     onStop: () -> Unit,
     onClearLog: () -> Unit,
-    onOpenHealthData: () -> Unit,
 ) {
     Scaffold(
         topBar = {
@@ -332,7 +321,7 @@ fun MainScreen(
             HorizontalDivider()
 
             // ── 버튼 ─────────────────────────────────────────────────────────
-            ButtonSection(isInitialized, isRunning, onInitSdk, onStart, onStop, onClearLog, onOpenHealthData)
+            ButtonSection(isInitialized, isRunning, onInitSdk, onStart, onStop, onClearLog)
 
             HorizontalDivider()
 
@@ -392,7 +381,6 @@ fun ButtonSection(
     onStart: () -> Unit,
     onStop: () -> Unit,
     onClearLog: () -> Unit,
-    onOpenHealthData: () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
@@ -435,17 +423,6 @@ fun ButtonSection(
                 onClick = onClearLog,
                 modifier = Modifier.weight(1f),
                 color = Color(0xFF616161),
-            )
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            ActionButton(
-                text = "삼성헬스 Data SDK 테스트",
-                onClick = onOpenHealthData,
-                modifier = Modifier.weight(1f),
-                color = Color(0xFF6A1B9A),
             )
         }
     }

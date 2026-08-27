@@ -27,26 +27,6 @@ PolihealthGalaxyWatchAndroidSdk.start(context)   // WatchReceiverService 포그�
 PolihealthGalaxyWatchAndroidSdk.stop(context)    // BLE 해제 + 서비스 중지
 ```
 
-### 삼성헬스 Data SDK 연동 (Galaxy Watch BLE와는 별개 기능)
-
-삼성헬스 앱에 저장된 걸음수/심박수/산소포화도/피부온도를 직접 읽어온다. `init`/`start`와 무관하게 바로 사용 가능.
-전부 `suspend fun`이며, 상세 배경은 [docs/samsung-health-integration.md](docs/samsung-health-integration.md) 참고.
-
-```kotlin
-val granted = PolihealthGalaxyWatchAndroidSdk.checkHealthDataPermission(context)   // Map<String, Boolean>
-if (granted.values.any { !it }) {
-    PolihealthGalaxyWatchAndroidSdk.requestHealthDataPermission(activity)
-}
-val steps = PolihealthGalaxyWatchAndroidSdk.readHealthDataSteps(context, days = 7)          // List<Map<String, Any>>
-val heartRate = PolihealthGalaxyWatchAndroidSdk.readHealthDataHeartRate(context, days = 7)
-val bloodOxygen = PolihealthGalaxyWatchAndroidSdk.readHealthDataBloodOxygen(context, days = 7)
-val skinTemp = PolihealthGalaxyWatchAndroidSdk.readHealthDataSkinTemperature(context, days = 7)
-```
-
-삼성 기기가 아니거나 삼성헬스 미설치/미로그인 등 사전 조건 미충족 시 `health.HealthDataSdkException(code: HealthDataErrorCode, ...)`을 던진다.
-`samsung-health-data-api` AAR은 파트너 개별 배포라 git에는 pom만 있다 — 실물 `.aar`(원본 파일명 `samsung-health-data-api-1.1.0.aar` 그대로)는 `polihealth-galaxy-watch-android-sdk/libs/repo/.../samsung-health-data-api/1.1.0/`에 직접 추가해야 빌드된다 (`polihealth-galaxy-watch-android-sdk/libs/repo/README.md` 참고).
-내부 구현은 `health/` 패키지(`HealthDataStoreProvider`, `HealthDataPermissionManager`, `*HealthDataReader`, `HealthDataManager`)에 있으며 전부 `internal` — `PolihealthGalaxyWatchAndroidSdk`만 공개 API로 노출한다.
-
 ## 아키텍처
 
 ```

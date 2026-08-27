@@ -10,7 +10,7 @@ android {
 
     defaultConfig {
         applicationId = "kr.co.hconnect.polihealth_galaxy_watch_android_sdk_example"
-        minSdk = 29 // polihealth-galaxy-watch-android-sdk 의 minSdk(Samsung Health Data SDK 요구사항)에 맞춤
+        minSdk = 24
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
