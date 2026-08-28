@@ -22,7 +22,7 @@ internal class HeartRateHealthDataReader(private val store: HealthDataStore) {
             .setInstantTimeFilter(InstantTimeFilter.of(startInstant, endInstant))
             .build()
 
-        val response = store.readData(request)
+        val response = withHealthDataErrorMapping { store.readData(request) }
         if (response.dataList.isEmpty()) return emptyList()
 
         return response.dataList.map { point ->

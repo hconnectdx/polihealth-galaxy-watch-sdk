@@ -27,7 +27,7 @@ internal class StepsHealthDataReader(private val store: HealthDataStore) {
             .setLocalTimeFilter(LocalTimeFilter.of(startDateTime, endDateTime))
             .build()
 
-        val response = store.aggregateData(request)
+        val response = withHealthDataErrorMapping { store.aggregateData(request) }
         val totalSteps = response.dataList.sumOf { (it.value as? Long) ?: 0L }
 
         if (totalSteps == 0L) return null

@@ -7,7 +7,6 @@ import android.os.Build
 import android.util.Log
 import com.samsung.android.sdk.health.data.HealthDataService
 import com.samsung.android.sdk.health.data.HealthDataStore
-import com.samsung.android.sdk.health.data.error.ErrorCode
 import com.samsung.android.sdk.health.data.error.HealthDataException
 import com.samsung.android.sdk.health.data.error.ResolvablePlatformException
 
@@ -45,7 +44,7 @@ internal class HealthDataStoreProvider(context: Context) {
         return try {
             HealthDataService.getStore(appContext).also { store = it }
         } catch (e: ResolvablePlatformException) {
-            val code = mapErrorCode(e.errorCode)
+            val code = mapSamsungErrorCode(e.errorCode)
             Log.e(TAG, "HealthDataStore 연결 실패 (해결 가능): ${e.errorCode}", e)
             if (activity != null && e.hasResolution) {
                 // 삼성헬스 설치/업데이트/활성화 안내 화면을 띄운다.
@@ -60,15 +59,6 @@ internal class HealthDataStoreProvider(context: Context) {
                 e,
             )
         }
-    }
-
-    // ErrorCode는 enum이 아니라 Int 상수 모음이고, HealthDataException.errorCode도 Int?(nullable)로 온다.
-    private fun mapErrorCode(errorCode: Int?): HealthDataErrorCode = when (errorCode) {
-        ErrorCode.ERR_PLATFORM_NOT_INSTALLED -> HealthDataErrorCode.SHEALTH_NOT_INSTALLED
-        ErrorCode.ERR_OLD_VERSION_PLATFORM -> HealthDataErrorCode.SHEALTH_OUTDATED
-        ErrorCode.ERR_PLATFORM_DISABLED -> HealthDataErrorCode.SHEALTH_DISABLED
-        ErrorCode.ERR_PLATFORM_NOT_INITIALIZED -> HealthDataErrorCode.SHEALTH_NOT_INITIALIZED
-        else -> HealthDataErrorCode.UNKNOWN
     }
 
     /** 삼성 기기 여부 + 삼성헬스 앱 설치 여부를 SDK 호출 전에 먼저 판단한다. */

@@ -4,6 +4,8 @@ import android.app.Activity
 import android.util.Log
 import com.samsung.android.sdk.health.data.HealthDataStore
 import com.samsung.android.sdk.health.data.error.AuthorizationException
+import com.samsung.android.sdk.health.data.error.HealthDataException
+import com.samsung.android.sdk.health.data.error.ResolvablePlatformException
 import com.samsung.android.sdk.health.data.permission.AccessType
 import com.samsung.android.sdk.health.data.permission.Permission
 import com.samsung.android.sdk.health.data.request.DataTypes
@@ -23,13 +25,17 @@ private const val TAG = "HealthDataPermissionManager"
 internal class HealthDataPermissionManager(private val store: HealthDataStore) {
 
     suspend fun getCurrentAuth(): Set<Permission> = withContext(Dispatchers.IO) {
-        store.getGrantedPermissions(REQUIRED_PERMISSIONS)
+        withHealthDataErrorMapping {
+            store.getGrantedPermissions(REQUIRED_PERMISSIONS)
+        }
     }
 
     suspend fun requestAuth(activity: Activity): Set<Permission> = withContext(Dispatchers.IO) {
         val granted = getCurrentAuth()
         if (granted.containsAll(REQUIRED_PERMISSIONS)) return@withContext granted
 
+        // AuthorizationException은 HealthDataException의 하위 타입이라 withHealthDataErrorMapping을
+        // 쓰면 안 된다 — 파트너 미승인(ACCESS_CONTROL_DENIED)을 구분해서 보여줘야 하므로 직접 처리한다.
         try {
             store.requestPermissions(REQUIRED_PERMISSIONS, activity)
         } catch (e: AuthorizationException) {
@@ -39,6 +45,14 @@ internal class HealthDataPermissionManager(private val store: HealthDataStore) {
                 "삼성헬스 권한 요청이 거부되었습니다. 파트너 승인된 데이터 타입만 요청했는지 확인하세요.",
                 e,
             )
+        } catch (e: ResolvablePlatformException) {
+            val code = mapSamsungErrorCode(e.errorCode)
+            Log.e(TAG, "권한 요청 실패 (해결 가능): ${e.errorCode}", e)
+            if (e.hasResolution) e.resolve(activity)
+            throw HealthDataSdkException(code, "삼성헬스 연결에 문제가 있습니다: ${e.errorCode}", e)
+        } catch (e: HealthDataException) {
+            Log.e(TAG, "권한 요청 중 알 수 없는 오류", e)
+            throw HealthDataSdkException(HealthDataErrorCode.UNKNOWN, "삼성헬스 연동 중 알 수 없는 오류가 발생했습니다.", e)
         }
         // 동의 화면 처리 후 최신 승인 상태를 다시 조회한다 (requestPermissions 반환값을 신뢰하지 않음).
         getCurrentAuth()

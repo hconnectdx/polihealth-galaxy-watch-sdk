@@ -27,7 +27,7 @@ internal class SkinTemperatureHealthDataReader(private val store: HealthDataStor
             .setInstantTimeFilter(InstantTimeFilter.of(startInstant, endInstant))
             .build()
 
-        val response = store.readData(request)
+        val response = withHealthDataErrorMapping { store.readData(request) }
         if (response.dataList.isEmpty()) return emptyList()
 
         return response.dataList.flatMap { point ->
