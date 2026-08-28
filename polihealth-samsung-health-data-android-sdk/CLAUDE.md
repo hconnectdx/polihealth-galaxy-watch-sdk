@@ -25,6 +25,12 @@ val skinTemp = PolihealthSamsungHealthDataAndroidSdk.readHealthDataSkinTemperatu
 
 삼성 기기가 아니거나 삼성헬스 미설치/미로그인 등 사전 조건 미충족 시 `HealthDataSdkException(code: HealthDataErrorCode, ...)`을 던진다.
 
+**에러 처리 설계 원칙**: 라이브러리는 `HealthDataErrorCode`(구조화된 원인 코드)와
+`HealthDataErrorCode.describe()`(개발자용 로그 메시지)까지만 책임진다. 최종 사용자에게 보여줄
+안내 문구/UI(다이얼로그, "삼성헬스 앱 열기" 버튼 등)는 이 라이브러리를 쓰는 앱이 각자의 UX에 맞게
+설계해야 한다 — 코드별 의미와 앱이 취해야 할 권장 조치는
+[docs/samsung-health-integration.md](docs/samsung-health-integration.md) 9-1절 표 참고.
+
 ## 아키텍처
 
 ```

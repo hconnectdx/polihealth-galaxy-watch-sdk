@@ -42,17 +42,17 @@ internal class HealthDataPermissionManager(private val store: HealthDataStore) {
             Log.e(TAG, "권한 요청 실패", e)
             throw HealthDataSdkException(
                 HealthDataErrorCode.ACCESS_CONTROL_DENIED,
-                "삼성헬스 권한 요청이 거부되었습니다. 파트너 승인된 데이터 타입만 요청했는지 확인하세요.",
+                HealthDataErrorCode.ACCESS_CONTROL_DENIED.describe(),
                 e,
             )
         } catch (e: ResolvablePlatformException) {
             val code = mapSamsungErrorCode(e.errorCode)
             Log.e(TAG, "권한 요청 실패 (해결 가능): ${e.errorCode}", e)
             if (e.hasResolution) e.resolve(activity)
-            throw HealthDataSdkException(code, "삼성헬스 연결에 문제가 있습니다: ${e.errorCode}", e)
+            throw HealthDataSdkException(code, "${code.describe()} (Samsung ErrorCode=${e.errorCode})", e)
         } catch (e: HealthDataException) {
             Log.e(TAG, "권한 요청 중 알 수 없는 오류", e)
-            throw HealthDataSdkException(HealthDataErrorCode.UNKNOWN, "삼성헬스 연동 중 알 수 없는 오류가 발생했습니다.", e)
+            throw HealthDataSdkException(HealthDataErrorCode.UNKNOWN, HealthDataErrorCode.UNKNOWN.describe(), e)
         }
         // 동의 화면 처리 후 최신 승인 상태를 다시 조회한다 (requestPermissions 반환값을 신뢰하지 않음).
         getCurrentAuth()

@@ -334,6 +334,57 @@ when (rawGlucose) {
 
 ---
 
+## 9-1. 에러 코드와 사용자 안내 — 라이브러리 vs 앱 책임 분리
+
+**설계 원칙**: 라이브러리는 "정확히 무엇이 문제인지"를 구조화된 신호(`HealthDataErrorCode` +
+`HealthDataSdkException`)로 알려주는 데까지만 책임진다. **최종 사용자에게 보여줄 안내 문구/UI**
+(다이얼로그를 띄울지 스낵바로 충분한지, 버튼을 눌러 삼성헬스 앱을 실행시킬지, 어떤 언어/톤으로 쓸지)는
+**이 라이브러리를 소비하는 앱이 각자의 UX에 맞게 결정**해야 한다. 여러 앱이 이 라이브러리를 공유해서
+쓸 수 있는데, 라이브러리가 특정 문구/UI를 강제하면 재사용성이 떨어지기 때문이다.
+
+이 원칙에 따라 `HealthDataErrorCode`에는 `describe()` 확장 함수가 있다 — **개발자가 로그를 보고 바로
+원인을 파악하기 위한 문자열**이며, `HealthDataSdkException.message`에 그대로 들어간다. 최종 사용자에게
+그대로 노출하는 용도가 아니다.
+
+| `HealthDataErrorCode` | Samsung 원본 `ErrorCode` | 의미 | 앱이 사용자에게 안내해야 할 조치(예시) |
+|---|---|---|---|
+| `NOT_SAMSUNG_DEVICE` | — (기기 제조사 자체 판별) | 삼성 기기가 아님 | 이 기능은 삼성 기기에서만 지원한다고 안내 |
+| `SHEALTH_NOT_INSTALLED` | `ERR_PLATFORM_NOT_INSTALLED` (3000) | 삼성헬스 앱 미설치 | Play 스토어로 이동하는 버튼 제공 |
+| `SHEALTH_OUTDATED` | `ERR_OLD_VERSION_PLATFORM` (3001) | 삼성헬스 앱 버전이 6.30.2 미만 | Play 스토어에서 업데이트하도록 버튼 제공 |
+| `SHEALTH_DISABLED` | `ERR_PLATFORM_DISABLED` (3002) | 삼성헬스 앱이 "사용 안 함" 상태 | 설정 > 앱 목록으로 이동하는 버튼 제공 |
+| `SHEALTH_NOT_INITIALIZED` | `ERR_PLATFORM_NOT_INITIALIZED` (3003) | 삼성헬스 앱의 OOBE(최초 실행 시 약관 동의/로그인 등 초기 설정) 미완료 — 앱은 설치·활성화돼 있지만 한 번도 제대로 실행된 적이 없음 | "삼성헬스 앱을 열어 초기 설정을 완료해주세요" + 삼성헬스 앱을 직접 실행시키는 버튼 제공 |
+| `ACCESS_CONTROL_DENIED` | `ERR_ACCESS_CONTROL` (2003) | 파트너 승인 안 된 데이터 타입이 요청 세트에 섞임 | **개발자 설정 문제**이므로 최종 사용자에게 노출하지 말고 로그/모니터링으로만 확인 |
+| `UNKNOWN` | 그 외 전부 | 위에 해당 없는 오류 | 일반적인 "일시적 오류, 잠시 후 다시 시도" 안내 |
+
+`ResolvablePlatformException.hasResolution`이 true인 경우(`SHEALTH_NOT_INSTALLED`/`SHEALTH_OUTDATED`/
+`SHEALTH_DISABLED`/`SHEALTH_NOT_INITIALIZED`)는 `requestHealthDataPermission(activity)` 호출 시
+라이브러리가 이미 Samsung SDK의 `resolve(activity)`를 호출해 삼성헬스 안내 화면을 자동으로 띄운다 —
+`checkHealthDataPermission(context)`(activity 없음)은 자동으로 못 띄우므로 코드 분기로 안내해야 한다.
+
+앱에서의 권장 처리 예시:
+
+```kotlin
+try {
+    val granted = PolihealthSamsungHealthDataAndroidSdk.checkHealthDataPermission(context)
+    // ...
+} catch (e: HealthDataSdkException) {
+    when (e.code) {
+        HealthDataErrorCode.SHEALTH_NOT_INSTALLED,
+        HealthDataErrorCode.SHEALTH_OUTDATED -> showGoToPlayStoreDialog()
+        HealthDataErrorCode.SHEALTH_DISABLED -> showGoToAppSettingsDialog()
+        HealthDataErrorCode.SHEALTH_NOT_INITIALIZED -> showOpenSamsungHealthDialog()
+        HealthDataErrorCode.NOT_SAMSUNG_DEVICE -> hideFeatureEntirely()
+        HealthDataErrorCode.ACCESS_CONTROL_DENIED -> {
+            Log.e(TAG, "파트너 미승인 데이터 타입 포함 — 개발 설정 확인 필요: ${e.message}")
+            showGenericErrorToast()
+        }
+        HealthDataErrorCode.UNKNOWN -> showGenericErrorToast()
+    }
+}
+```
+
+---
+
 
 ## 10. 공용 유틸 (원본에서 사용한 확장 함수)
 

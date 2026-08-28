@@ -50,14 +50,10 @@ internal class HealthDataStoreProvider(context: Context) {
                 // 삼성헬스 설치/업데이트/활성화 안내 화면을 띄운다.
                 e.resolve(activity)
             }
-            throw HealthDataSdkException(code, "삼성헬스 연결에 문제가 있습니다: ${e.errorCode}", e)
+            throw HealthDataSdkException(code, "${code.describe()} (Samsung ErrorCode=${e.errorCode})", e)
         } catch (e: HealthDataException) {
             Log.e(TAG, "HealthDataStore 연결 실패", e)
-            throw HealthDataSdkException(
-                HealthDataErrorCode.UNKNOWN,
-                "삼성헬스 연결 중 알 수 없는 오류가 발생했습니다.",
-                e,
-            )
+            throw HealthDataSdkException(HealthDataErrorCode.UNKNOWN, HealthDataErrorCode.UNKNOWN.describe(), e)
         }
     }
 
@@ -66,13 +62,13 @@ internal class HealthDataStoreProvider(context: Context) {
         if (!isSamsungDevice()) {
             throw HealthDataSdkException(
                 HealthDataErrorCode.NOT_SAMSUNG_DEVICE,
-                "삼성 기기에서만 삼성헬스 Data SDK를 사용할 수 있습니다. (MANUFACTURER=${Build.MANUFACTURER})",
+                "${HealthDataErrorCode.NOT_SAMSUNG_DEVICE.describe()} (MANUFACTURER=${Build.MANUFACTURER})",
             )
         }
         if (!isShealthInstalled()) {
             throw HealthDataSdkException(
                 HealthDataErrorCode.SHEALTH_NOT_INSTALLED,
-                "삼성헬스 앱이 설치되어 있지 않습니다.",
+                HealthDataErrorCode.SHEALTH_NOT_INSTALLED.describe(),
             )
         }
     }

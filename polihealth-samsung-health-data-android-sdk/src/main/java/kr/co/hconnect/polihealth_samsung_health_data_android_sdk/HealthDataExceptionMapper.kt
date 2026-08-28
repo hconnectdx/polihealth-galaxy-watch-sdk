@@ -40,8 +40,8 @@ internal suspend fun <T> withHealthDataErrorMapping(activity: Activity? = null, 
             // 삼성헬스 설치/업데이트/활성화 안내 화면을 띄운다.
             e.resolve(activity)
         }
-        throw HealthDataSdkException(code, "삼성헬스 연결에 문제가 있습니다: ${e.errorCode}", e)
+        throw HealthDataSdkException(code, "${code.describe()} (Samsung ErrorCode=${e.errorCode})", e)
     } catch (e: HealthDataException) {
         Log.e(TAG, "삼성헬스 연동 중 알 수 없는 오류", e)
-        throw HealthDataSdkException(HealthDataErrorCode.UNKNOWN, "삼성헬스 연동 중 알 수 없는 오류가 발생했습니다.", e)
+        throw HealthDataSdkException(HealthDataErrorCode.UNKNOWN, HealthDataErrorCode.UNKNOWN.describe(), e)
     }
