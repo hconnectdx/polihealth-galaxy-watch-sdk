@@ -302,7 +302,11 @@ fun interface SensorDataCallback {
 ### ⚠️ 이 콜백 안에서 전송을 기다리면 안 됩니다
 
 센서 데이터는 25~100Hz로 쏟아집니다. 콜백에서 전송이 끝날 때까지 블로킹하면
-**역압(backpressure)이 걸려 측정 자체가 밀립니다.**
+**역압(backpressure)이 걸려 수집량 자체가 깎입니다.**
+
+> 동기 `sendData`가 호출자를 **배치당 수십 초** 세우는 바람에
+> **수집량이 1/4로 떨어진 것이 실측**됐습니다.
+> (`bluetooth-sdk-android-peripheral` CHANGELOG 1.0.1)
 
 **큐에 넣고 즉시 반환하세요.**
 
@@ -324,7 +328,28 @@ PolihealthGalaxyWatchWearOsSdk.init { payload ->
 > `false`는 큐가 가득 찼다는 뜻이고(드롭됨), 연결이 끊기면 큐에 남은 데이터도 폐기됩니다.
 > 유실 건수를 추적하려면 이 반환값을 세어두세요.
 
+큐 상한은 `PeripheralConfig.txQueueCapacity`로 **기본 32**입니다. 무한 큐로 인한
+메모리 폭주를 막으려고 상한 도달 시 신규를 거부하는 정책입니다.
+전송이 느려 드롭이 잦다면 이 값을 올리기 전에 **청크 크기부터 확인**하세요.
+
 `sendDataAsync`는 `bluetooth-sdk-android-peripheral` **1.0.1 이상**에 있습니다.
+(개발 중 내부 빌드에 1.0.2 라벨을 쓴 적이 있으나, 정식 배포는 1.0.1 하나로 합쳐졌습니다.)
+
+### 진단에 쓸 수 있는 속성
+
+문제가 생겼을 때 로그에 찍어두면 원인 추적이 빨라집니다.
+
+| 속성 | 의미 |
+|---|---|
+| `HCBlePeripheral.isConnected` | 폰이 연결돼 있는지 |
+| `HCBlePeripheral.negotiatedMtu` | 협상된 MTU |
+| `HCBlePeripheral.currentChunkSize` | **실효 청크 크기** — 아래 참고 |
+
+> 갤럭시워치–폰 연결에서 EATT 채널이 수립되면 `onMtuChanged`가 발화하지 않아
+> MTU가 23(청크 20B)으로 잡히는 문제가 있습니다. 실효 ~1.2KB/s로 링크 용량의
+> 극히 일부만 씁니다. Peripheral SDK 1.0.1이 **청크 프로브**로 실제 크기를 왕복 측정해
+> 해결하며, 그 결과가 `currentChunkSize`입니다. `negotiatedMtu`가 23인데
+> `currentChunkSize`가 253이면 프로브가 정상 동작한 것입니다.
 
 ---
 
