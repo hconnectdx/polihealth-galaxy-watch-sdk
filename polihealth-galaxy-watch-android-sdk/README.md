@@ -600,8 +600,31 @@ AAR엔 POM이 없어 자동으로 안 따라옵니다. [2절](#2-설치) 목록�
 
 ---
 
+## 예제 앱 돌려보기
+
+이 레포를 클론했다면 예제가 바로 빌드됩니다. `local.properties`에 두 줄만 넣으면 됩니다.
+
+```properties
+sdk.dir=/Users/<사용자>/Library/Android/sdk
+githubUsername=<사용자명>
+githubAccessToken=<read:packages 권한 토큰>
+```
+
+```bash
+./gradlew :polihealth-galaxy-watch-android-sdk-example:assembleDebug
+```
+
+레포 안에서는 예제가 `implementation(project(":polihealth-galaxy-watch-android-sdk"))`로
+**옆 모듈을 직접 참조**하므로, 2절의 의존성 목록을 따로 적을 필요가 없습니다.
+버전은 루트 `gradle/libs.versions.toml`이 관리합니다.
+
+예제에서 볼 수 있는 것:
+
+- 콜백 11개 전부 구현 — 로그 화면에 이벤트가 순서대로 찍힙니다
+- `SDK 초기화` → `서비스 시작` → 워치 연결 → 측정 → 업로드까지의 전체 흐름
+- `수면측정 종료` 버튼 — `stop()`과 어떻게 다른지
+
 ## 관련 문서
 
 - [`polihealth-galaxy-watch-wearos-sdk`](../polihealth-galaxy-watch-wearos-sdk) — 짝이 되는 워치 앱 SDK
 - [`bluetooth-sdk-android-v2`](https://github.com/hconnectdx/bluetooth-sdk-android-v2) — BLE 통신 기반
-- `polihealth-galaxy-watch-android-sdk-example` — 동작하는 예제 앱

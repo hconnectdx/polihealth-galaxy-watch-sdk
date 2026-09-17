@@ -571,8 +571,37 @@ class MainActivity : ComponentActivity() {
 
 ---
 
+## 예제 앱 돌려보기
+
+이 레포를 클론했다면 예제가 바로 빌드됩니다. `local.properties`에 세 줄을 넣고:
+
+```properties
+sdk.dir=/Users/<사용자>/Library/Android/sdk
+githubUsername=<사용자명>
+githubAccessToken=<read:packages 권한 토큰>
+```
+
+```bash
+./gradlew :polihealth-galaxy-watch-wearos-sdk-example:assembleDebug
+```
+
+레포 안에서는 예제가 `implementation(project(":polihealth-galaxy-watch-wearos-sdk"))`로
+옆 모듈을 직접 참조하므로 2절의 의존성 목록을 따로 적을 필요가 없습니다.
+**다만 삼성 Sensor AAR은 예제에서도 `libs/`에 직접 있어야 합니다.**
+
+예제에서 볼 수 있는 것:
+
+- **BLE 전송 경로 전체** — `onDataReady` → `sendDataAsync` → 폰
+- 미연결·큐 드롭·스킵 건수 집계 (이 콜백의 반환값을 어떻게 다뤄야 하는지)
+- `MEASUREMENT_TYPE` 전송을 센서 데이터와 같은 큐로 보내는 방법
+- 화면의 BLE 연결 상태와 실효 청크 크기 — 측정이 돌아도 여기가 끊겨 있으면
+  폰에 아무것도 도달하지 않습니다
+
+> 예제를 **워치에만** 올리면 광고만 하고 끝입니다. 폰에
+> [`polihealth-galaxy-watch-android-sdk-example`](../polihealth-galaxy-watch-android-sdk-example)을
+> 같이 올려야 연결부터 전송까지 확인됩니다.
+
 ## 관련 문서
 
 - [`polihealth-galaxy-watch-android-sdk`](../polihealth-galaxy-watch-android-sdk) — 짝이 되는 폰 SDK
 - `bluetooth-sdk-android-peripheral` — BLE 전송 (워치가 Peripheral 역할)
-- `polihealth-galaxy-watch-wearos-sdk-example` — 동작하는 예제 앱
