@@ -55,7 +55,37 @@
 
 ## 2. 설치
 
-### AAR로 받은 경우
+### 방법 A — GitHub Packages (권장)
+
+`local.properties`에 자격증명을 넣고 저장소를 등록하면 한 줄로 끝납니다.
+
+```properties
+githubUsername=<사용자명>
+githubAccessToken=<read:packages 권한 토큰>
+```
+
+```kotlin
+maven {
+    url = uri("https://maven.pkg.github.com/hconnectdx/polihealth-galaxy-watch-sdk")
+    credentials {
+        username = localProperties.getProperty("githubUsername")
+        password = localProperties.getProperty("githubAccessToken")
+    }
+}
+
+dependencies {
+    implementation("kr.co.hconnect:polihealth-galaxy-watch-wearos-sdk:1.0.0")
+
+    // ⚠️ 삼성 Sensor API는 이 방법으로도 따라오지 않습니다 — 아래 설명
+    implementation(files("libs/samsung-health-sensor-api-1.4.1.aar"))
+}
+```
+
+POM이 함께 배포되므로 protobuf·coroutines 등 **전이 의존성은 자동으로 따라옵니다.**
+**다만 삼성 Sensor AAR만은 예외입니다** — SDK가 `compileOnly`로 참조해서
+POM에 아예 기록되지 않기 때문입니다.
+
+### 방법 B — AAR 파일만 받은 경우
 
 ```kotlin
 dependencies {
@@ -64,7 +94,7 @@ dependencies {
     // ⚠️ 삼성 Sensor API — 반드시 직접 넣어야 합니다 (아래 설명)
     implementation(files("libs/samsung-health-sensor-api-1.4.1.aar"))
 
-    // ⚠️ AAR에는 POM이 없어 전이 의존성이 따라오지 않습니다 (SDK 빌드 시점의 실제 버전)
+    // ⚠️ AAR 단독에는 POM이 없어 전이 의존성이 따라오지 않습니다 (SDK 빌드 시점의 실제 버전)
     implementation("androidx.core:core-ktx:1.18.0")          // ⚠️ 아래 호환성 주의
     implementation("androidx.appcompat:appcompat:1.7.1")
     implementation("com.google.protobuf:protobuf-javalite:3.25.3")

@@ -47,16 +47,51 @@
 
 ## 2. 설치
 
-### AAR로 받은 경우
+받는 방법이 두 가지고, **난이도가 많이 다릅니다.** 가능하면 A를 쓰세요.
 
-`.aar` 파일을 `app/libs/`에 넣고:
+### 방법 A — GitHub Packages (권장)
+
+`local.properties`에 발급받은 자격증명을 넣고:
+
+```properties
+githubUsername=<사용자명>
+githubAccessToken=<read:packages 권한 토큰>
+```
+
+저장소를 등록한 뒤:
+
+```kotlin
+// settings.gradle.kts 또는 build.gradle.kts
+maven {
+    url = uri("https://maven.pkg.github.com/hconnectdx/polihealth-galaxy-watch-sdk")
+    credentials {
+        username = localProperties.getProperty("githubUsername")
+        password = localProperties.getProperty("githubAccessToken")
+    }
+}
+```
+
+**한 줄이면 끝납니다.**
+
+```kotlin
+dependencies {
+    implementation("kr.co.hconnect:polihealth-galaxy-watch-android-sdk:1.0.0")
+}
+```
+
+POM이 함께 배포되므로 `bluetooth-sdk-android-v2`를 포함한 **전이 의존성이 전부
+자동으로 따라옵니다.** 아래 목록을 손으로 적을 필요가 없습니다.
+
+### 방법 B — AAR 파일만 받은 경우
+
+자격증명을 받을 수 없을 때만 쓰세요. `.aar`을 `app/libs/`에 넣고:
 
 ```kotlin
 dependencies {
     implementation(files("libs/polihealth-galaxy-watch-android-sdk-1.0.0.aar"))
     implementation(files("libs/bluetooth-sdk-android-v2-1.0.11.aar"))   // 필수 — 아래 설명
 
-    // ⚠️ AAR에는 POM이 없어 전이 의존성이 자동으로 따라오지 않습니다.
+    // ⚠️ AAR 단독에는 POM이 없어 전이 의존성이 따라오지 않습니다.
     //    아래를 전부 직접 선언해야 합니다. (SDK 빌드 시점의 실제 버전)
     implementation("androidx.core:core-ktx:1.18.0")          // ⚠️ 아래 호환성 주의
     implementation("androidx.appcompat:appcompat:1.7.1")
@@ -542,6 +577,14 @@ AAR엔 POM이 없어 자동으로 안 따라옵니다. [2절](#2-설치) 목록�
 
 **워치 데이터가 안 풀림 · protobuf 파싱 오류**
 워치 앱과 폰 앱의 `protobuf-javalite` 버전이 다릅니다. 같은 버전으로 맞추세요.
+
+**전송이 극단적으로 느림 (~1.2KB/s)**
+갤럭시워치 연결에서 EATT 채널이 수립되면 MTU 협상이 워치 앱까지 도달하지 않아
+청크가 20B로 잡히는 문제가 있습니다. 이 SDK가 워치의 **청크 프로브**(`PROBE:`)를
+받아 `PROBE_ACK`로 회신해 실효 크기를 판정하므로, **폰과 워치 SDK를 같이 최신으로
+올리면** 자동 해결됩니다. 앱이 따로 할 일은 없습니다.
+
+한쪽만 올리면 프로브가 동작하지 않으니 **두 SDK는 항상 짝을 맞춰 배포하세요.**
 
 **업로드가 타임아웃**
 `readTimeoutMs` / `writeTimeoutMs`를 줄이지 마세요. 기본 120초입니다.
