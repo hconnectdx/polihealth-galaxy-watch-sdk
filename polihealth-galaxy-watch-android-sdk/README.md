@@ -619,9 +619,30 @@ exampleClientSecret=<발급받은 ClientSecret>
 ./gradlew :polihealth-galaxy-watch-android-sdk-example:assembleDebug
 ```
 
-> 서버 접속 정보는 **소스에 두지 않습니다.** `local.properties`(git 제외)나
-> 환경변수(`EXAMPLE_API_URL` 등)에서 읽으며, 값이 없으면 빈 문자열로 빌드됩니다.
-> 빌드는 통과하고 SDK 초기화 단계에서 안내와 함께 멈춥니다.
+### 설정 키 전체 목록
+
+서버 접속 정보는 **소스에 두지 않습니다.** `local.properties`(git 제외)를 먼저 보고,
+없으면 환경변수를 읽습니다. 둘 다 없으면 빈 문자열로 빌드되며, 빌드는 통과하고
+SDK 초기화 단계에서 안내와 함께 멈춥니다.
+
+| local.properties | 환경변수 | 채울 값 |
+|---|---|---|
+| `exampleApiUrl` | `EXAMPLE_API_URL` | 서버 주소 (끝의 `/` 유무는 무관) |
+| `exampleClientId` | `EXAMPLE_CLIENT_ID` | 발급받은 ClientId |
+| `exampleClientSecret` | `EXAMPLE_CLIENT_SECRET` | 발급받은 ClientSecret |
+
+release 빌드에서 **다른 서버**를 쓸 때만 아래를 추가로 지정합니다.
+비워두면 위 값을 그대로 씁니다.
+
+| local.properties | 환경변수 |
+|---|---|
+| `exampleReleaseApiUrl` | `EXAMPLE_RELEASE_API_URL` |
+| `exampleReleaseClientId` | `EXAMPLE_RELEASE_CLIENT_ID` |
+| `exampleReleaseClientSecret` | `EXAMPLE_RELEASE_CLIENT_SECRET` |
+
+> 이 키들은 **예제 앱 전용**입니다. SDK 자체는 `init()` 파라미터로 값을 받으므로,
+> 여러분의 앱에서는 원하는 방식(BuildConfig, 원격 설정, 로그인 응답 등)으로
+> 넘기면 됩니다.
 
 레포 안에서는 예제가 `implementation(project(":polihealth-galaxy-watch-android-sdk"))`로
 **옆 모듈을 직접 참조**하므로, 2절의 의존성 목록을 따로 적을 필요가 없습니다.
