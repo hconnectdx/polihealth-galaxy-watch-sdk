@@ -1,8 +1,29 @@
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
 }
+
+val localProperties = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.exists()) load(FileInputStream(file))
+}
+
+/**
+ * 서버 접속 정보는 소스에 두지 않는다 — local.properties(git 제외)나 환경변수에서 읽는다.
+ *
+ * local.properties 예시:
+ *   exampleApiUrl=https://your-server.example.com/
+ *   exampleClientId=<발급받은 ClientId>
+ *   exampleClientSecret=<발급받은 ClientSecret>
+ *
+ * 값이 없으면 빈 문자열로 빌드된다 — 빌드는 통과하고 실행 시 SDK 초기화에서 막힌다.
+ */
+fun serverConfig(propKey: String, envKey: String, default: String = ""): String =
+    localProperties.getProperty(propKey) ?: System.getenv(envKey) ?: default
 
 android {
     namespace = "kr.co.hconnect.polihealth_galaxy_watch_android_sdk_example"
@@ -17,13 +38,12 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        // debug 기본값 (stg)
-        buildConfigField("String", "API_URL",       "\"https://mapi-stg.health-on.co.kr/\"")
-        buildConfigField("String", "CLIENT_ID",     "\"3270e7da-55b1-4dd4-abb9-5c71295b849b\"")
-        buildConfigField(
-            "String", "CLIENT_SECRET",
-            "\"eyJhbGciOiJIUzUxMiIsInR5cCI6IkpXVCJ9.eyJpbmZyYSI6IkhlYWx0aE9uLVN0YWdpbmciLCJjbGllbnQtaWQiOiIzMjcwZTdkYS01NWIxLTRkZDQtYWJiOS01YzcxMjk1Yjg0OWIifQ.u0rBK-2t3l4RZ113EzudZsKb0Us9PEtiPcFDBv--gYdJf9yZJQOpo41XqzbgSdDa6Z1VDrgZXiOkIZOTeeaEYA\""
-        )
+        buildConfigField("String", "API_URL",
+            "\"${serverConfig("exampleApiUrl", "EXAMPLE_API_URL")}\"")
+        buildConfigField("String", "CLIENT_ID",
+            "\"${serverConfig("exampleClientId", "EXAMPLE_CLIENT_ID")}\"")
+        buildConfigField("String", "CLIENT_SECRET",
+            "\"${serverConfig("exampleClientSecret", "EXAMPLE_CLIENT_SECRET")}\"")
     }
 
     buildTypes {
@@ -34,13 +54,13 @@ android {
                 "proguard-rules.pro"
             )
 
-            // release 는 live 서버
-            buildConfigField("String", "API_URL",       "\"https://mapi.health-on.co.kr/\"")
-            buildConfigField("String", "CLIENT_ID",     "\"659c95fd-900a-4a9a-8f61-1888334a3c7b\"")
-            buildConfigField(
-                "String", "CLIENT_SECRET",
-                "\"eyJhbGciOiJIUzUxMiIsInR5cCI6IkpXVCJ9.eyJpbmZyYSI6IkhlYWx0aE9uLUxpdmUiLCJjbGllbnQtaWQiOiI2NTljOTVmZC05MDBhLTRhOWEtOGY2MS0xODg4MzM0YTNjN2IifQ.GV8Fg5pY-08GlZI0UUFLIqtrmlwnU7kQ-soN6VFlj_usXBex7mv3-vjkAZxV5Yb2MMecifUqwOQpikyirX9aBw\""
-            )
+            // release 전용 서버를 따로 쓸 때만 지정한다. 없으면 위 defaultConfig 값을 그대로 쓴다.
+            serverConfig("exampleReleaseApiUrl", "EXAMPLE_RELEASE_API_URL").takeIf { it.isNotEmpty() }
+                ?.let { buildConfigField("String", "API_URL", "\"$it\"") }
+            serverConfig("exampleReleaseClientId", "EXAMPLE_RELEASE_CLIENT_ID").takeIf { it.isNotEmpty() }
+                ?.let { buildConfigField("String", "CLIENT_ID", "\"$it\"") }
+            serverConfig("exampleReleaseClientSecret", "EXAMPLE_RELEASE_CLIENT_SECRET").takeIf { it.isNotEmpty() }
+                ?.let { buildConfigField("String", "CLIENT_SECRET", "\"$it\"") }
         }
     }
     compileOptions {

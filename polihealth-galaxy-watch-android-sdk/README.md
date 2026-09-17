@@ -608,11 +608,20 @@ AAR엔 POM이 없어 자동으로 안 따라옵니다. [2절](#2-설치) 목록�
 sdk.dir=/Users/<사용자>/Library/Android/sdk
 githubUsername=<사용자명>
 githubAccessToken=<read:packages 권한 토큰>
+
+# 예제가 붙을 서버 — 없으면 앱이 "서버 설정이 없습니다" 안내를 띄운다
+exampleApiUrl=https://your-server.example.com/
+exampleClientId=<발급받은 ClientId>
+exampleClientSecret=<발급받은 ClientSecret>
 ```
 
 ```bash
 ./gradlew :polihealth-galaxy-watch-android-sdk-example:assembleDebug
 ```
+
+> 서버 접속 정보는 **소스에 두지 않습니다.** `local.properties`(git 제외)나
+> 환경변수(`EXAMPLE_API_URL` 등)에서 읽으며, 값이 없으면 빈 문자열로 빌드됩니다.
+> 빌드는 통과하고 SDK 초기화 단계에서 안내와 함께 멈춥니다.
 
 레포 안에서는 예제가 `implementation(project(":polihealth-galaxy-watch-android-sdk"))`로
 **옆 모듈을 직접 참조**하므로, 2절의 의존성 목록을 따로 적을 필요가 없습니다.

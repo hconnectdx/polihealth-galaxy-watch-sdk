@@ -98,6 +98,14 @@ class MainActivity : ComponentActivity() {
     // ── SDK 기능 ──────────────────────────────────────────────────────────────
 
     private fun initSdk() {
+        // 서버 정보는 local.properties에서 주입된다 (build.gradle.kts 참고).
+        // 비어 있으면 업로드가 전부 실패하므로 먼저 막아준다.
+        if (BuildConfig.API_URL.isBlank() || BuildConfig.CLIENT_ID.isBlank()) {
+            appendLog("서버 설정이 없습니다 — local.properties에 다음을 추가하세요:")
+            appendLog("  exampleApiUrl / exampleClientId / exampleClientSecret")
+            return
+        }
+
         PolihealthGalaxyWatchAndroidSdk.init(
             baseUrl      = BuildConfig.API_URL,
             clientId     = BuildConfig.CLIENT_ID,
