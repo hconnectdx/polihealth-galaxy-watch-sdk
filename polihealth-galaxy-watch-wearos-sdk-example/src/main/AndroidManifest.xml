@@ -12,7 +12,13 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_HEALTH" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
+    <!-- 폰으로 센서 데이터를 보내기 위한 BLE Peripheral(광고 + GATT 서버) 권한.
+         BLUETOOTH_ADVERTISE/CONNECT는 Android 12(API 31)부터 런타임 요청이 필요하다. -->
+    <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+
     <uses-feature android:name="android.hardware.type.watch" />
+    <uses-feature android:name="android.hardware.bluetooth_le" android:required="true" />
 
     <application
         android:allowBackup="true"

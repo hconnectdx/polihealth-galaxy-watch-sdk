@@ -88,6 +88,7 @@ class MainActivity : ComponentActivity() {
                     onInitSdk = ::initSdk,
                     onStart = ::startService,
                     onStop = ::stopService,
+                    onStopSleep = ::stopSleepMeasurement,
                     onClearLog = ::clearLog,
                 )
             }
@@ -219,6 +220,21 @@ class MainActivity : ComponentActivity() {
         appendLog("서비스 정지 요청")
     }
 
+    /**
+     * 워치에 수면측정 종료 명령을 보낸다.
+     *
+     * stop()과 다르다 — 서비스는 계속 실행되고 워치의 수면 측정만 끝난다.
+     * 실제로 종료되면 onSleepFinished 콜백으로 수면 점수가 올라온다.
+     */
+    private fun stopSleepMeasurement() {
+        if (!isRunning.value) {
+            appendLog("서비스가 실행 중이 아닙니다")
+            return
+        }
+        PolihealthGalaxyWatchAndroidSdk.stopSleepMeasurement(this)
+        appendLog("수면측정 종료 명령 전송 — onSleepFinished 대기")
+    }
+
     private fun clearLog() {
         logs.clear()
     }
@@ -295,6 +311,7 @@ fun MainScreen(
     onInitSdk: () -> Unit,
     onStart: () -> Unit,
     onStop: () -> Unit,
+    onStopSleep: () -> Unit,
     onClearLog: () -> Unit,
 ) {
     Scaffold(
@@ -321,7 +338,7 @@ fun MainScreen(
             HorizontalDivider()
 
             // ── 버튼 ─────────────────────────────────────────────────────────
-            ButtonSection(isInitialized, isRunning, onInitSdk, onStart, onStop, onClearLog)
+            ButtonSection(isInitialized, isRunning, onInitSdk, onStart, onStop, onStopSleep, onClearLog)
 
             HorizontalDivider()
 
@@ -380,6 +397,7 @@ fun ButtonSection(
     onInitSdk: () -> Unit,
     onStart: () -> Unit,
     onStop: () -> Unit,
+    onStopSleep: () -> Unit,
     onClearLog: () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -418,6 +436,19 @@ fun ButtonSection(
                 modifier = Modifier.weight(1f),
                 color = Color(0xFFB71C1C),
             )
+            // stop()과 다르다 — 서비스는 살아있고 워치의 수면 측정만 끝낸다
+            ActionButton(
+                text = "수면측정 종료",
+                onClick = onStopSleep,
+                enabled = isRunning,
+                modifier = Modifier.weight(1f),
+                color = Color(0xFF5E35B1),
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             ActionButton(
                 text = "로그 지우기",
                 onClick = onClearLog,

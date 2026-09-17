@@ -41,6 +41,11 @@ dependencies {
     implementation(project(":polihealth-galaxy-watch-wearos-sdk"))
     implementation(files("libs/samsung-health-sensor-api-1.4.1.aar"))
 
+    // 측정한 센서 데이터를 폰으로 보내는 BLE Peripheral.
+    // wearos SDK는 protobuf 직렬화까지만 하고 전송 수단은 정해주지 않으므로,
+    // 소비 앱이 직접 붙인다. 폰측은 bluetooth-sdk-android-v2(Central)로 받는다.
+    implementation("kr.co.hconnect:bluetooth-sdk-android-peripheral:1.0.1")
+
     implementation(libs.play.services.wearable)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.ui)

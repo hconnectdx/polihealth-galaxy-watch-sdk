@@ -1,6 +1,7 @@
 package kr.co.hconnect.polihealth_galaxy_watch_wearos_sdk_example.presentation
 
 import android.Manifest
+import android.bluetooth.BluetoothDevice
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
@@ -44,6 +45,9 @@ import androidx.wear.compose.material.ChipDefaults
 import androidx.wear.compose.material.MaterialTheme
 import androidx.wear.compose.material.Text
 import androidx.wear.compose.material.TimeText
+import kr.co.hconnect.bluetooth_sdk_android_peripheral.HCBlePeripheral
+import kr.co.hconnect.bluetooth_sdk_android_peripheral.PeripheralConfig
+import kr.co.hconnect.bluetooth_sdk_android_peripheral.PeripheralEventListener
 import kr.co.hconnect.polihealth_galaxy_watch_wearos_sdk.PolihealthGalaxyWatchWearOsSdk
 import kr.co.hconnect.polihealth_galaxy_watch_wearos_sdk.data.SdkTrackingState
 import kr.co.hconnect.polihealth_galaxy_watch_wearos_sdk.proto.SensorBufferProto
@@ -59,6 +63,13 @@ class MainActivity : ComponentActivity() {
 
     private val logs = mutableStateListOf<LogEntry>()
     private var sdkInitialized = mutableStateOf(false)
+
+    // BLE 전송 상태 — 폰으로 데이터가 실제로 나가고 있는지 화면에서 확인하기 위한 것
+    private val bleConnected = mutableStateOf(false)
+    private val bleChunkSize = mutableStateOf(0)
+    private var bleEnqueueOk = 0     // 송신 큐 적재 성공
+    private var bleEnqueueFail = 0   // 큐가 가득 차 드롭됨
+    private var bleSkipCount = 0     // BLE 미연결로 보내지 못함
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -85,6 +96,8 @@ class MainActivity : ComponentActivity() {
                 MainScreen(
                     logs = logs,
                     sdkInitialized = sdkInitialized.value,
+                    bleConnected = bleConnected.value,
+                    bleChunkSize = bleChunkSize.value,
                     onInitSdk = ::initSdk,
                     onStartOnDemandPpg25 = ::startOnDemandPpg25,
                     onStartOnDemandPpg100Ecg = ::startOnDemandPpg100Ecg,
@@ -107,6 +120,12 @@ class MainActivity : ComponentActivity() {
         )
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             perms.add(Manifest.permission.POST_NOTIFICATIONS)
+        }
+        // BLE Peripheral(광고 + GATT 서버) — Android 12부터 런타임 권한이 필요하다.
+        // 없으면 start()가 조용히 실패해서 폰이 워치를 영영 못 찾는다.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            perms.add(Manifest.permission.BLUETOOTH_ADVERTISE)
+            perms.add(Manifest.permission.BLUETOOTH_CONNECT)
         }
 
         val notGranted = perms.filter {
@@ -147,9 +166,21 @@ class MainActivity : ComponentActivity() {
             return
         }
 
-        PolihealthGalaxyWatchWearOsSdk.init { data ->
-            logSensorData(data)
-            true
+        startBlePeripheral()
+
+        // 센서 콜백에서는 절대 전송을 기다리지 않는다.
+        // sendData()(동기)를 쓰면 호출자가 배치당 수십 초 블로킹되어 역압으로
+        // 수집량 자체가 깎인다 — sendDataAsync()로 큐에 적재하고 즉시 리턴한다.
+        PolihealthGalaxyWatchWearOsSdk.init { payload ->
+            logSensorData(payload)
+
+            if (!HCBlePeripheral.isConnected) {
+                bleSkipCount++
+                return@init false
+            }
+            val accepted = HCBlePeripheral.sendDataAsync(payload)
+            if (accepted) bleEnqueueOk++ else bleEnqueueFail++
+            accepted
         }
 
         PolihealthGalaxyWatchWearOsSdk.setMeasurementDuration(this, 120_000L)
@@ -163,10 +194,62 @@ class MainActivity : ComponentActivity() {
         addLog("SDK 초기화 완료 | 측정=${duration}초 | 슬롯=[${slots}]분", LogLevel.SUCCESS)
     }
 
+    /** BLE Peripheral 시작 — 워치가 광고하고, 폰(Central)이 연결해 온다. */
+    private fun startBlePeripheral() {
+        HCBlePeripheral.init(this, PeripheralConfig())
+        HCBlePeripheral.addEventListener(object : PeripheralEventListener {
+            override fun onDeviceConnected(device: BluetoothDevice) {
+                bleConnected.value = true
+                addLog("폰 연결됨", LogLevel.SUCCESS)
+            }
+
+            override fun onDeviceDisconnected(device: BluetoothDevice) {
+                bleConnected.value = false
+                addLog("폰 연결 해제 — 이후 데이터는 폰에 도달하지 않음", LogLevel.WARN)
+            }
+
+            override fun onChunkSizeDetermined(chunkSize: Int) {
+                // 갤럭시워치는 EATT 때문에 onMtuChanged가 안 오는 경우가 있다.
+                // 그때도 프로브가 실효 크기를 왕복 측정해 여기로 알려준다.
+                chunkSize.let { bleChunkSize.value = it }
+                addLog("실효 청크 크기 확정: ${chunkSize}B (MTU=${HCBlePeripheral.negotiatedMtu})", LogLevel.INFO)
+            }
+
+            override fun onAdvertiseFailed(errorCode: Int) {
+                addLog("광고 실패 (code=$errorCode) — BLE 권한을 확인하세요", LogLevel.ERROR)
+            }
+        })
+
+        if (HCBlePeripheral.start()) {
+            addLog("BLE 광고 시작 — 폰 연결 대기", LogLevel.SUCCESS)
+        } else {
+            addLog("BLE 시작 실패 — 권한/블루투스 상태 확인", LogLevel.ERROR)
+        }
+    }
+
+    /**
+     * 폰에 측정 종류를 알린다.
+     *
+     * 센서 데이터와 **같은 송신 큐**로 보내야 한다. sendData()(동기)를 쓰면 큐를 새치기해서
+     * STOP이 먼저 도착하고, 폰이 세션을 닫아버려 아직 전송 안 된 마지막 센서 데이터가
+     * 통째로 버려진다. 큐 적재가 거부된 경우에만 동기 경로로 폴백한다.
+     */
+    private fun notifyMeasurementType(type: String) {
+        if (!HCBlePeripheral.isConnected) {
+            addLog("BLE 미연결 — 폰이 MEASUREMENT_TYPE:$type 를 받지 못함", LogLevel.WARN)
+            return
+        }
+        val message = "MEASUREMENT_TYPE:$type".toByteArray(Charsets.UTF_8)
+        val ok = HCBlePeripheral.sendDataAsync(message) || HCBlePeripheral.sendData(message)
+        addLog("측정 타입 알림: $type ${if (ok) "✓" else "✗"}", if (ok) LogLevel.INFO else LogLevel.ERROR)
+    }
+
     private fun startOnDemandPpg25() {
         if (!checkInit()) return
         val types = setOf(SensorType.ECG, SensorType.PPG_GREEN_25, SensorType.PPG_IR_25, SensorType.PPG_RED_25)
         addLog("온디맨드 시작: ECG + PPG25", LogLevel.INFO)
+        // 측정 시작을 먼저 알려야 폰이 onMeasurementStarted로 종류를 구분할 수 있다
+        notifyMeasurementType("ECG")
         PolihealthGalaxyWatchWearOsSdk.startOnDemandTracking(this, types)
     }
 
@@ -174,12 +257,14 @@ class MainActivity : ComponentActivity() {
         if (!checkInit()) return
         val types = setOf(SensorType.ACC, SensorType.PPG_GREEN_100, SensorType.ECG)
         addLog("온디맨드 시작: ACC + PPG100 + ECG", LogLevel.INFO)
+        notifyMeasurementType("ECG")
         PolihealthGalaxyWatchWearOsSdk.startOnDemandTracking(this, types)
     }
 
     private fun stopOnDemand() {
         addLog("온디맨드 중지 요청", LogLevel.INFO)
         PolihealthGalaxyWatchWearOsSdk.stopOnDemandTracking(this)
+        notifyMeasurementType("STOP")
     }
 
     private fun startPeriodic() {
@@ -190,6 +275,8 @@ class MainActivity : ComponentActivity() {
             ?: setOf(SensorType.ACC, SensorType.PPG_GREEN_25)
         val slotMinute = slots.firstOrNull() ?: 1
         addLog("주기 측정: ${durationMs/1000}초, slot=$slotMinute, 센서=$types", LogLevel.INFO)
+        // 주기 측정은 수면 시나리오로 가정 — 일상 측정이라면 "ECG"를 보낸다
+        notifyMeasurementType("SLEEP")
         PolihealthGalaxyWatchWearOsSdk.startPeriodicTracking(this, durationMs, slotMinute, types)
     }
 
@@ -260,6 +347,8 @@ data class LogEntry(val time: String, val message: String, val level: LogLevel)
 fun MainScreen(
     logs: List<LogEntry>,
     sdkInitialized: Boolean,
+    bleConnected: Boolean,
+    bleChunkSize: Int,
     onInitSdk: () -> Unit,
     onStartOnDemandPpg25: () -> Unit,
     onStartOnDemandPpg100Ecg: () -> Unit,
@@ -308,6 +397,28 @@ fun MainScreen(
                         text = if (sdkInitialized) "SDK: 초기화됨 | $stateText" else "SDK: 미초기화",
                         fontSize = 11.sp,
                         color = if (sdkInitialized) stateColor else Color.Red,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+
+            // BLE 전송 상태 — 측정이 돌아도 여기가 끊겨 있으면 폰에 아무것도 도달하지 않는다
+            item {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = when {
+                            !sdkInitialized -> "BLE: 대기"
+                            bleConnected && bleChunkSize > 0 -> "폰 연결됨 | 청크 ${bleChunkSize}B"
+                            bleConnected -> "폰 연결됨"
+                            else -> "폰 미연결 — 전송 안 됨"
+                        },
+                        fontSize = 11.sp,
+                        color = if (bleConnected) Color(0xFF4CAF50) else Color.Gray,
                         textAlign = TextAlign.Center
                     )
                 }
