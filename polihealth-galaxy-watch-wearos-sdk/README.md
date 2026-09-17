@@ -295,18 +295,36 @@ fun interface SensorDataCallback {
 |---|---|
 | **언제** | 직렬화된 protobuf 바이트가 전송 준비됐을 때 |
 | **`data`** | `SensorBufferProto`를 직렬화한 바이트 배열 |
-| **반환값** | **전송 성공 여부** — SDK가 이 값을 보고 다음 동작을 정합니다 |
+| **반환값** | 데이터를 받아들였는지 여부 |
 
-**반환값을 성의 있게 돌려주세요.** BLE 전송이 실패했는데 `true`를 주면
-SDK는 보낸 것으로 간주하고 버퍼를 비웁니다. 데이터가 사라집니다.
+`fun interface`라서 람다로 짧게 쓸 수 있습니다.
+
+### ⚠️ 이 콜백 안에서 전송을 기다리면 안 됩니다
+
+센서 데이터는 25~100Hz로 쏟아집니다. 콜백에서 전송이 끝날 때까지 블로킹하면
+**역압(backpressure)이 걸려 측정 자체가 밀립니다.**
+
+**큐에 넣고 즉시 반환하세요.**
 
 ```kotlin
-PolihealthGalaxyWatchWearOsSdk.init { bytes ->
-    HCBlePeripheral.sendData(bytes)    // Boolean을 그대로 반환
+PolihealthGalaxyWatchWearOsSdk.init { payload ->
+    if (!HCBlePeripheral.isConnected) {
+        return@init false          // 미연결 — 이 데이터는 폰에 도달하지 못합니다
+    }
+    HCBlePeripheral.sendDataAsync(payload)   // 논블로킹: 큐에 넣고 바로 리턴
 }
 ```
 
-`fun interface`라서 람다로 짧게 쓸 수 있습니다.
+| 함수 | 성격 | 콜백에서 |
+|---|---|---|
+| `sendDataAsync(data)` | 논블로킹 · 큐에 적재 | ✅ **이것을 쓰세요** |
+| `sendData(data)` | 동기 · 전송 끝날 때까지 블록 | ❌ 쓰지 마세요 |
+
+> `sendDataAsync`의 반환값은 **큐 적재 성공 여부이지 전송 완료가 아닙니다.**
+> `false`는 큐가 가득 찼다는 뜻이고(드롭됨), 연결이 끊기면 큐에 남은 데이터도 폐기됩니다.
+> 유실 건수를 추적하려면 이 반환값을 세어두세요.
+
+`sendDataAsync`는 `bluetooth-sdk-android-peripheral` **1.0.1 이상**에 있습니다.
 
 ---
 
@@ -320,27 +338,54 @@ PolihealthGalaxyWatchWearOsSdk.init { bytes ->
 HCBlePeripheral.init(context)
 HCBlePeripheral.start()
 
-// 2) 센서 데이터가 나오면 그대로 흘려보냅니다
-PolihealthGalaxyWatchWearOsSdk.init { bytes ->
-    HCBlePeripheral.sendData(bytes)
+// 2) 센서 데이터가 나오면 큐에 넣고 즉시 반환
+PolihealthGalaxyWatchWearOsSdk.init { payload ->
+    if (!HCBlePeripheral.isConnected) return@init false
+    HCBlePeripheral.sendDataAsync(payload)
 }
 ```
 
-`HCBlePeripheral.sendData()`가 4바이트 길이 헤더를 붙이고 MTU 크기로 쪼개서 보냅니다.
+`HCBlePeripheral`이 4바이트 길이 헤더를 붙이고 MTU 크기로 쪼개서 보냅니다.
 폰측 `PacketReassembler`가 그걸 다시 붙입니다. **직접 쪼개지 마세요.**
 
 ### 측정 타입 알리기
 
 폰에 "지금 일상 측정인지 수면 측정인지" 알리려면 별도 텍스트를 보냅니다.
-
-```kotlin
-HCBlePeripheral.sendText("MEASUREMENT_TYPE:SLEEP")   // 수면 측정
-HCBlePeripheral.sendText("MEASUREMENT_TYPE:ECG")     // 일상 측정
-HCBlePeripheral.sendText("MEASUREMENT_TYPE:STOP")    // 측정 종료
-```
-
 폰측이 이걸 받아 `onMeasurementStarted` 콜백으로 올립니다.
 센서 데이터는 바이너리고 이건 UTF-8 텍스트라, 폰이 형식으로 구분합니다.
+
+| 메시지 | 의미 |
+|---|---|
+| `MEASUREMENT_TYPE:ECG` | 일상(ECG) 측정 시작 |
+| `MEASUREMENT_TYPE:SLEEP` | 수면 측정 시작 |
+| `MEASUREMENT_TYPE:STOP` | 측정 종료 |
+
+**이것도 `sendDataAsync`로 보내야 합니다.** `sendText()`나 `sendData()`를 쓰면
+동기 경로라 **센서 데이터 큐를 새치기합니다.**
+
+```kotlin
+private fun notifyMeasurementType(type: String) {
+    if (!HCBlePeripheral.isConnected) {
+        Log.w(TAG, "BLE 미연결 — 폰이 이 신호를 받지 못합니다")
+        return
+    }
+    val message = "MEASUREMENT_TYPE:$type".toByteArray(Charsets.UTF_8)
+
+    var ok = HCBlePeripheral.sendDataAsync(message)
+    if (!ok) {
+        // 큐가 가득 차 거부된 경우 — 이 신호는 순서보다 "도착"이 훨씬 중요하므로
+        // 동기 경로로라도 반드시 보낸다
+        ok = HCBlePeripheral.sendData(message)
+    }
+}
+```
+
+> **`STOP`을 동기로 보내면 데이터가 통째로 사라집니다.**
+> 아직 전송되지 않은 센서 데이터가 큐에 남아 있는데 `STOP`이 새치기해서 먼저 도착하면,
+> 폰이 세션을 닫아버려 **뒤에 남아있던 마지막 센서 데이터가 전부 버려집니다.**
+> 실측으로 확인된 문제입니다. 같은 큐를 쓰면 항상 센서 데이터 뒤에 순서대로 나갑니다.
+>
+> 큐 적재가 거부됐을 때만 동기 경로로 폴백하세요 — 그 경우엔 순서보다 도착이 중요합니다.
 
 ---
 
@@ -356,9 +401,15 @@ class MainActivity : ComponentActivity() {
         HCBlePeripheral.init(this)
         HCBlePeripheral.start()
 
-        // 2) SDK 초기화 — 데이터가 나오면 BLE로 흘려보냄
-        PolihealthGalaxyWatchWearOsSdk.init { bytes ->
-            HCBlePeripheral.sendData(bytes)
+        // 2) SDK 초기화 — 데이터가 나오면 큐에 적재하고 즉시 반환 (역압 방지)
+        PolihealthGalaxyWatchWearOsSdk.init { payload ->
+            if (!HCBlePeripheral.isConnected) {
+                skipCount++
+                return@init false
+            }
+            HCBlePeripheral.sendDataAsync(payload).also { accepted ->
+                if (!accepted) dropCount++      // 큐 가득 참 — 이 데이터는 유실됩니다
+            }
         }
 
         // 3) 설정은 앱 시작 시 한 번에 (runBlocking이라 몰아서)
@@ -380,22 +431,34 @@ class MainActivity : ComponentActivity() {
     private fun startPeriodic() {
         if (!hasPermissions()) { requestPermissions(REQUIRED, REQ_CODE); return }
 
+        notifyMeasurementType("SLEEP")
         PolihealthGalaxyWatchWearOsSdk.schedulePeriodicAlarm(this, SENSORS)
-        HCBlePeripheral.sendText("MEASUREMENT_TYPE:SLEEP")
     }
 
     private fun startOnDemand() {
         if (!hasPermissions()) { requestPermissions(REQUIRED, REQ_CODE); return }
 
-        HCBlePeripheral.sendText("MEASUREMENT_TYPE:ECG")
+        notifyMeasurementType("ECG")
         PolihealthGalaxyWatchWearOsSdk.startOnDemandTracking(this, setOf(SensorType.ECG))
     }
 
     private fun stop() {
         PolihealthGalaxyWatchWearOsSdk.stopOnDemandTracking(this)
         PolihealthGalaxyWatchWearOsSdk.cancelPeriodicAlarm(this)
-        HCBlePeripheral.sendText("MEASUREMENT_TYPE:STOP")
+        notifyMeasurementType("STOP")      // 반드시 같은 큐로 — 8절 참고
     }
+
+    /** 측정 타입 알림. 센서 데이터와 같은 송신 큐를 써야 순서가 보장됩니다. */
+    private fun notifyMeasurementType(type: String) {
+        if (!HCBlePeripheral.isConnected) return
+        val message = "MEASUREMENT_TYPE:$type".toByteArray(Charsets.UTF_8)
+        if (!HCBlePeripheral.sendDataAsync(message)) {
+            HCBlePeripheral.sendData(message)   // 큐 거부 시에만 동기 폴백
+        }
+    }
+
+    private var skipCount = 0   // BLE 미연결로 보내지 못한 건수
+    private var dropCount = 0   // 큐가 가득 차 버려진 건수
 
     companion object {
         private val SENSORS = setOf(SensorType.ACC, SensorType.PPG_GREEN_25)
@@ -427,9 +490,20 @@ class MainActivity : ComponentActivity() {
 `SCHEDULE_EXACT_ALARM` 권한 문제일 수 있습니다. Android 12 이상에서는
 사용자가 설정에서 "알람 및 리마인더"를 허용해야 정확한 알람이 동작합니다.
 
-**데이터가 중간에 사라짐**
-`onDataReady`에서 전송에 실패했는데 `true`를 반환하고 있지 않은지 확인하세요.
-SDK는 이 반환값을 보고 버퍼를 비웁니다.
+**측정 종료 직전 데이터가 통째로 사라짐**
+`MEASUREMENT_TYPE:STOP`을 `sendData()`/`sendText()`로 보내고 있습니다.
+동기 경로라 센서 데이터 큐를 새치기해서, 폰이 세션을 먼저 닫아버립니다.
+`sendDataAsync()`로 보내세요 → [8절](#측정-타입-알리기)
+
+**측정이 자꾸 밀리고 끊김**
+`onDataReady`에서 `sendData()`로 전송을 기다리고 있습니다.
+센서는 25~100Hz로 쏟아지므로 콜백이 블로킹되면 역압이 걸립니다.
+`sendDataAsync()`로 큐에 넣고 즉시 반환하세요 → [7절](#7-이벤트--sensordatacallback)
+
+**데이터가 드문드문 유실됨**
+`sendDataAsync()`가 `false`를 반환하고 있는지 확인하세요 — 큐가 가득 차면
+새 데이터를 거부합니다(드롭). BLE 연결이 끊겨도 큐에 남은 것은 폐기됩니다.
+반환값을 세어두면 유실 규모를 알 수 있습니다.
 
 **폰이 데이터를 못 읽음**
 워치와 폰의 `protobuf-javalite` 버전이 다릅니다. 같은 버전으로 맞추세요.
