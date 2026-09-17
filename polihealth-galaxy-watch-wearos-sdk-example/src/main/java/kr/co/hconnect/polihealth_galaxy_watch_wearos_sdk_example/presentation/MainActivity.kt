@@ -101,6 +101,7 @@ class MainActivity : ComponentActivity() {
                     onInitSdk = ::initSdk,
                     onStartOnDemandPpg25 = ::startOnDemandPpg25,
                     onStartOnDemandPpg100Ecg = ::startOnDemandPpg100Ecg,
+                    onStartSleep = ::startSleep,
                     onStopOnDemand = ::stopOnDemand,
                     onStartPeriodic = ::startPeriodic,
                     onScheduleAlarm = ::scheduleAlarm,
@@ -261,6 +262,21 @@ class MainActivity : ComponentActivity() {
         PolihealthGalaxyWatchWearOsSdk.startOnDemandTracking(this, types)
     }
 
+    /**
+     * 수면 측정 시작.
+     *
+     * 폰에 SLEEP을 먼저 알린 뒤 측정을 시작한다 — 폰은 이 신호로 onMeasurementStarted에서
+     * 일상/수면을 구분하고, 수면이면 protocol8-1 경로로 업로드한다.
+     * 실제 운용 앱은 여기에 측정/대기를 반복하는 사이클과 포그라운드 서비스가 더 붙는다.
+     */
+    private fun startSleep() {
+        if (!checkInit()) return
+        val types = setOf(SensorType.ACC, SensorType.PPG_GREEN_25)
+        addLog("수면 측정 시작: ACC + PPG25", LogLevel.INFO)
+        notifyMeasurementType("SLEEP")
+        PolihealthGalaxyWatchWearOsSdk.startOnDemandTracking(this, types)
+    }
+
     private fun stopOnDemand() {
         addLog("온디맨드 중지 요청", LogLevel.INFO)
         PolihealthGalaxyWatchWearOsSdk.stopOnDemandTracking(this)
@@ -275,8 +291,10 @@ class MainActivity : ComponentActivity() {
             ?: setOf(SensorType.ACC, SensorType.PPG_GREEN_25)
         val slotMinute = slots.firstOrNull() ?: 1
         addLog("주기 측정: ${durationMs/1000}초, slot=$slotMinute, 센서=$types", LogLevel.INFO)
-        // 주기 측정은 수면 시나리오로 가정 — 일상 측정이라면 "ECG"를 보낸다
-        notifyMeasurementType("SLEEP")
+        // 여기서는 MEASUREMENT_TYPE을 보내지 않는다.
+        // 주기 측정은 알람이 깨워서 시작되므로, 어떤 종류(일상/수면)로 다룰지는 앱의
+        // 운용 정책에 달렸다. 폰에 구분이 필요하면 알람이 실제 측정을 띄우는 시점에
+        // notifyMeasurementType("ECG") 또는 ("SLEEP")을 호출할 것.
         PolihealthGalaxyWatchWearOsSdk.startPeriodicTracking(this, durationMs, slotMinute, types)
     }
 
@@ -352,6 +370,7 @@ fun MainScreen(
     onInitSdk: () -> Unit,
     onStartOnDemandPpg25: () -> Unit,
     onStartOnDemandPpg100Ecg: () -> Unit,
+    onStartSleep: () -> Unit,
     onStopOnDemand: () -> Unit,
     onStartPeriodic: () -> Unit,
     onScheduleAlarm: () -> Unit,
@@ -453,10 +472,19 @@ fun MainScreen(
                 )
             }
 
-            // 온디맨드 중지
+            // 수면 측정 — 폰에 SLEEP을 알린 뒤 ACC+PPG25로 측정
             item {
                 SdkButton(
-                    text = "온디맨드 중지",
+                    text = "수면 측정\nACC+PPG25",
+                    color = Color(0xFF5E35B1),
+                    onClick = onStartSleep
+                )
+            }
+
+            // 측정 중지 (온디맨드·수면 공통)
+            item {
+                SdkButton(
+                    text = "측정 중지",
                     color = Color(0xFFF44336),
                     onClick = onStopOnDemand
                 )
