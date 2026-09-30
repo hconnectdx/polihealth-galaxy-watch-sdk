@@ -53,6 +53,13 @@ private const val PRIORITY_IDLE_TIMEOUT_MS = 15_000L
 /** 유휴 감시 주기. */
 private const val PRIORITY_IDLE_CHECK_MS = 5_000L
 
+/**
+ * 측정 도중(수면측정 등) BLE 연결이 예기치 않게 끊겼을 때 재연결을 시도하기 전 대기 시간.
+ * HCBle의 자체 재시도(connectionRetryInfoMap)는 최초 연결 시도에만 적용되고 연결 성공 후
+ * 끊기는 경우는 대상이 아니라서, 이 서비스 레벨에서 별도로 재연결을 걸어준다.
+ */
+private const val RECONNECT_DELAY_MS = 5_000L
+
 @SuppressLint("MissingPermission")
 class WatchReceiverService : Service() {
 
@@ -75,6 +82,12 @@ class WatchReceiverService : Service() {
     private var lastDataAtMs = 0L
 
     private var priorityIdleWatchdog: Job? = null
+
+    /** 사용자/시스템이 명시적으로 서비스를 중지시킨 경우(정상 종료). true면 재연결을 시도하지 않는다. */
+    @Volatile
+    private var isIntentionalStop = false
+
+    private var reconnectJob: Job? = null
 
     private lateinit var sessionManager: SessionManager
     private lateinit var dataWriter: DataWriter
@@ -111,6 +124,8 @@ class WatchReceiverService : Service() {
         Log.i(TAG, "onStartCommand action=${intent?.action}")
 
         if (intent?.action == Constants.ACTION_STOP_SERVICE) {
+            isIntentionalStop = true
+            reconnectJob?.cancel()
             writeToWatch(NusConstants.CMD_SERVICE_STOPPED)
             stopSelf()
             return START_NOT_STICKY
@@ -139,6 +154,9 @@ class WatchReceiverService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         Log.d(TAG, "onDestroy")
+
+        isIntentionalStop = true
+        reconnectJob?.cancel()
 
         if (::sessionManager.isInitialized && sessionManager.isRecording) {
             sessionManager.finishSession()
@@ -191,7 +209,10 @@ class WatchReceiverService : Service() {
                     }
 
                     BLEState.STATE_DISCONNECTED -> {
-                        Log.d(TAG, "워치 연결 해제: $address")
+                        Log.d(TAG, "워치 연결 해제: $address (측정중=${sessionManager.isRecording}, 의도적 종료=$isIntentionalStop)")
+
+                        val shouldReconnect = !isIntentionalStop && sessionManager.isRecording
+
                         // reassembler.reset() 과 finishSession() 은 반드시 bleDispatcher 위에서
                         // 순서대로 실행해야 한다. finishSession()을 콜백 스레드에서 직접 호출하면
                         // 이미 bleDispatcher에 큐잉된 reassembler.feed()/process() 처리와 레이스가
@@ -199,11 +220,18 @@ class WatchReceiverService : Service() {
                         // 꼬일 수 있다.
                         serviceScope.launch(bleDispatcher) {
                             reassembler.reset()
-                            if (sessionManager.isRecording) sessionManager.finishSession()
+                            // 재연결을 시도할 거면 세션은 그대로 두고 이어서 받는다 —
+                            // 여기서 finishSession()을 부르면 재연결 성공 후 데이터가 와도
+                            // 이미 끝난 세션으로 취급돼 유실된다.
+                            if (!shouldReconnect && sessionManager.isRecording) sessionManager.finishSession()
                         }
                         connectedDeviceAddress = null
                         connectionPriorityHigh = false
                         PolihealthGalaxyWatchAndroidSdk.getCallback()?.onDisconnected()
+
+                        if (shouldReconnect) {
+                            scheduleReconnect(address)
+                        }
                     }
 
                     else -> Unit
@@ -233,6 +261,30 @@ class WatchReceiverService : Service() {
             useBondingChangeState = false,
             maxRetries = 3
         )
+    }
+
+    /**
+     * 측정 도중 예기치 않게 끊긴 경우의 재연결 스케줄러.
+     *
+     * HCBle의 자체 재시도(`connectionRetryInfoMap`)는 연결이 한 번 성공하면 지워지기 때문에
+     * "연결된 뒤 도중에 끊기는 경우"는 대상이 아니다 — 이 함수가 그 빈틈을 메운다.
+     *
+     * [RECONNECT_DELAY_MS] 후 [connectWatch]를 다시 호출하며, 그 시도가 또 실패해서
+     * `onConnState`가 다시 `STATE_DISCONNECTED`를 보고하면 그 콜백에서 이 함수가 다시
+     * 호출되어(재귀적으로) 자연스럽게 반복된다. 재연결에 성공하거나(STATE_CONNECTED),
+     * 서비스가 의도적으로 종료되거나(`isIntentionalStop`), 세션이 끝나면 멈춘다.
+     */
+    private fun scheduleReconnect(address: String) {
+        reconnectJob?.cancel()
+        reconnectJob = serviceScope.launch {
+            delay(RECONNECT_DELAY_MS)
+            if (isIntentionalStop || !sessionManager.isRecording) {
+                Log.d(TAG, "재연결 취소 — 의도적 종료 또는 세션 종료됨")
+                return@launch
+            }
+            Log.w(TAG, "측정 중 연결 끊김 — 재연결 시도: $address")
+            connectWatch(address)
+        }
     }
 
     // ── 청크 크기 프로브 응답 ─────────────────────────────────────────────────
