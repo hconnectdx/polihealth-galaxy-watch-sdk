@@ -58,6 +58,10 @@ object PolihealthGalaxyWatchAndroidSdk {
      * @param connectTimeoutMs 연결 타임아웃(ms). 기본 15초
      * @param readTimeoutMs    응답 대기 타임아웃(ms). CSV 업로드 후 서버 처리 시간을 고려해 기본 120초
      * @param writeTimeoutMs   요청 전송 타임아웃(ms). 대용량 멀티파트 업로드를 고려해 기본 120초
+     * @param autoUpload       측정 데이터를 [baseUrl] 로 자동 전송할지 여부. 기본 true.
+     *                         false 면 서버 요청을 하나도 보내지 않으며, 앱은 [ServerSdkCallback.onSensorData]
+     *                         로 받은 샘플을 직접 전송한다. 수면 종료 시 [ServerSdkCallback.onSleepFinished] 는
+     *                         sleepQuality = null 로 호출된다.
      */
     fun init(
         baseUrl: String,
@@ -67,6 +71,7 @@ object PolihealthGalaxyWatchAndroidSdk {
         connectTimeoutMs: Long = 15_000L,
         readTimeoutMs: Long = 120_000L,
         writeTimeoutMs: Long = 120_000L,
+        autoUpload: Boolean = true,
     ) {
         this.callback = callback
         HealthOnClient.init(
@@ -76,6 +81,7 @@ object PolihealthGalaxyWatchAndroidSdk {
             connectTimeoutMs = connectTimeoutMs,
             readTimeoutMs    = readTimeoutMs,
             writeTimeoutMs   = writeTimeoutMs,
+            autoUpload       = autoUpload,
         )
     }
 

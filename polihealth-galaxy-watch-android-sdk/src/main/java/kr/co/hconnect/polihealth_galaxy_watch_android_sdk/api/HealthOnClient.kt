@@ -42,6 +42,11 @@ object HealthOnClient {
     internal var clientSecret: String = ""
         private set
 
+    /** false 면 SessionManager 가 서버 요청(sleep/start·stop, protocol2-1·8-1)을 모두 생략한다. */
+    @Volatile
+    internal var autoUpload: Boolean = true
+        private set
+
     @Volatile
     var userSno: Int = 4
         private set
@@ -61,6 +66,7 @@ object HealthOnClient {
      * @param connectTimeoutMs 연결 타임아웃(ms) (기본 15초)
      * @param readTimeoutMs    응답 타임아웃(ms) (기본 30초)
      * @param writeTimeoutMs   요청 전송 타임아웃(ms) (기본 60초, 대용량 멀티파트 업로드 여유)
+     * @param autoUpload       측정 데이터 자동 전송 여부 (기본 true)
      */
     @Synchronized
     fun init(
@@ -70,7 +76,9 @@ object HealthOnClient {
         connectTimeoutMs: Long = 15_000L,
         readTimeoutMs: Long = 30_000L,
         writeTimeoutMs: Long = 60_000L,
+        autoUpload: Boolean = true,
     ) {
+        this.autoUpload = autoUpload
         this.baseUrl = if (baseUrl.endsWith("/")) baseUrl else "$baseUrl/"
         this.clientId = clientId
         this.clientSecret = clientSecret
@@ -96,7 +104,7 @@ object HealthOnClient {
         initialized = true
         Log.d(
             TAG,
-            "HealthOnClient initialized. baseUrl=$baseUrl " +
+            "HealthOnClient initialized. baseUrl=$baseUrl autoUpload=$autoUpload " +
                     "(connectTo=${connectTimeoutMs}ms, readTo=${readTimeoutMs}ms, writeTo=${writeTimeoutMs}ms)"
         )
     }
