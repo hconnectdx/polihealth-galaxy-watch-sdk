@@ -75,7 +75,7 @@ maven {
 
 ```kotlin
 dependencies {
-    implementation("kr.co.hconnect:polihealth-galaxy-watch-android-sdk:1.0.0")
+    implementation("kr.co.hconnect:polihealth-galaxy-watch-android-sdk:1.1.0")
 }
 ```
 
@@ -88,7 +88,7 @@ POM이 함께 배포되므로 `bluetooth-sdk-android-v2`를 포함한 **전이 �
 
 ```kotlin
 dependencies {
-    implementation(files("libs/polihealth-galaxy-watch-android-sdk-1.0.0.aar"))
+    implementation(files("libs/polihealth-galaxy-watch-android-sdk-1.1.0.aar"))
     implementation(files("libs/bluetooth-sdk-android-v2-1.0.11.aar"))   // 필수 — 아래 설명
 
     // ⚠️ AAR 단독에는 POM이 없어 전이 의존성이 따라오지 않습니다.
@@ -208,6 +208,7 @@ PolihealthGalaxyWatchAndroidSdk.init(
     connectTimeoutMs: Long = 15_000L,
     readTimeoutMs:    Long = 120_000L,
     writeTimeoutMs:   Long = 120_000L,
+    autoUpload:       Boolean = true,
 )
 ```
 
@@ -220,8 +221,28 @@ PolihealthGalaxyWatchAndroidSdk.init(
 | `connectTimeoutMs` | | 15초 | 서버 연결 타임아웃 |
 | `readTimeoutMs` | | 120초 | 응답 대기. CSV 업로드 후 서버 처리 시간을 고려해 깁니다 |
 | `writeTimeoutMs` | | 120초 | 요청 전송. 대용량 멀티파트를 고려해 깁니다 |
+| `autoUpload` | | `true` | 측정 데이터를 `baseUrl`로 자동 전송할지 여부. `false`면 서버 요청을 하나도 보내지 않습니다 → [아래](#자동-업로드-끄기) |
 
 > 타임아웃 기본값을 줄이지 마세요. 수면 측정은 한 번에 수 MB를 올립니다.
+
+### 자동 업로드 끄기
+
+데이터를 자체 형식으로 직접 보내려면 `autoUpload = false`로 초기화하세요. *(1.1.0부터)*
+
+```kotlin
+PolihealthGalaxyWatchAndroidSdk.init(
+    baseUrl      = "",        // autoUpload=false 면 쓰이지 않습니다
+    clientId     = "",
+    clientSecret = "",
+    callback     = callback,
+    autoUpload   = false,
+)
+```
+
+- SDK는 `poli/...` 요청을 하나도 보내지 않습니다. `onProtocol2_1Result` · `onProtocol8_1Result`도 오지 않습니다.
+- 워치 연결·측정·`onSensorData` 콜백은 그대로 옵니다. 이 샘플을 받아 원하는 서버로 보내면 됩니다.
+- 수면 종료 시 `onSleepFinished(sessionId, null)`이 호출됩니다(점수는 서버가 계산하므로 `null`).
+- CSV 파일은 지금처럼 폰에 저장됩니다(`onStoragePath`로 위치 확인).
 
 ### 사용자 정보
 

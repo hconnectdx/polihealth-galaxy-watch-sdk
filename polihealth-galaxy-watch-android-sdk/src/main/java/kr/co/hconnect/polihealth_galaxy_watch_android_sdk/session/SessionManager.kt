@@ -247,6 +247,11 @@ internal class SessionManager(
 
     /** 수면 측정 종료 후 서버에 stop 알림을 전송하고, sleepQuality 를 콜백으로 전달한다. */
     private fun notifySleepStop(sessionId: String) {
+        if (!HealthOnClient.autoUpload) {
+            Log.d(TAG, "autoUpload=false — sleep/stop 전송 생략 (session=$sessionId)")
+            callback.onSleepFinished(sessionId, null)
+            return
+        }
         try {
             val response = SleepStopAPI.requestPost(sessionId = sessionId)
             if (response.success) {
@@ -269,6 +274,10 @@ internal class SessionManager(
 
     /** 수면 측정 시작 시 서버에 start 알림을 전송한다. */
     private fun notifySleepStart() {
+        if (!HealthOnClient.autoUpload) {
+            Log.d(TAG, "autoUpload=false — sleep/start 전송 생략")
+            return
+        }
         try {
             val response = SleepStartAPI.requestPost()
             if (response.success) {
@@ -349,6 +358,10 @@ internal class SessionManager(
      * `POST /poli/day/protocol2-1`
      */
     private fun sendProtocol2_1Files(sessionId: String, sessionDir: File) {
+        if (!HealthOnClient.autoUpload) {
+            Log.d(TAG, "autoUpload=false — protocol2-1 전송 생략 (session=$sessionId)")
+            return
+        }
         val ppgFile = dataWriter.getFile(sessionDir, SensorType.PPG_GREEN_25)
             ?: dataWriter.getFile(sessionDir, SensorType.PPG_GREEN_100)
         val ecgFile = dataWriter.getFile(sessionDir, SensorType.ECG)
@@ -410,6 +423,10 @@ internal class SessionManager(
      * sessionId 는 protocol8-1 스펙(`yyyyMMdd_HHmmss`, 15자) 을 따른다.
      */
     private fun sendProtocol8_1Files(sessionId: String, chunkDir: File) {
+        if (!HealthOnClient.autoUpload) {
+            Log.d(TAG, "autoUpload=false — protocol8-1 전송 생략 (session=$sessionId)")
+            return
+        }
         if (sessionId.length != 15) {
             Log.e(
                 TAG,
