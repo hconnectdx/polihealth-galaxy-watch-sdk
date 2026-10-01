@@ -75,6 +75,17 @@ interface ServerSdkCallback {
     fun onSleepFinished(sessionId: String, sleepQuality: Int?) {}
 
     /**
+     * [onSleepFinished]에 `/poli/sleep/stop` 요청의 성공 여부를 더한 버전. SDK는 이쪽을 호출하며,
+     * 기본 구현은 기존 [onSleepFinished]로 위임한다.
+     *
+     * @param serverResponded stop 요청이 정상 응답(2xx)을 받았으면 true. 통신 실패/예외/비정상 응답이면 false.
+     *   true인데 [sleepQuality]가 null이면 서버가 점수를 산출하지 못한 것이다.
+     */
+    fun onSleepFinished(sessionId: String, sleepQuality: Int?, serverResponded: Boolean) {
+        onSleepFinished(sessionId, sleepQuality)
+    }
+
+    /**
      * `/poli/day/protocol2-1` (일상/ECG) 전송 결과를 수신했을 때 호출된다.
      *
      * @param sessionId 전송 대상 세션 식별자

@@ -254,16 +254,16 @@ internal class SessionManager(
                     TAG,
                     "sleep/stop 전송 성공 status=${response.httpCode} sleepQuality=${response.sleepQuality}"
                 )
-                callback.onSleepFinished(sessionId, response.sleepQuality)
+                callback.onSleepFinished(sessionId, response.sleepQuality, serverResponded = true)
             } else {
                 Log.e(TAG, "sleep/stop 전송 실패 status=${response.httpCode} body=${response.body}")
                 callback.onError("sleep/stop 전송 실패 (status=${response.httpCode})")
-                callback.onSleepFinished(sessionId, null)
+                callback.onSleepFinished(sessionId, null, serverResponded = false)
             }
         } catch (t: Throwable) {
             Log.e(TAG, "sleep/stop 전송 중 예외", t)
             callback.onError("sleep/stop 전송 중 예외: ${t.message}")
-            callback.onSleepFinished(sessionId, null)
+            callback.onSleepFinished(sessionId, null, serverResponded = false)
         }
     }
 
