@@ -89,6 +89,14 @@ class WatchReceiverService : Service() {
 
     private var reconnectJob: Job? = null
 
+    /**
+     * ACTION_STOP_SLEEP_MEASUREMENT를 받았을 때 BLE가 끊겨 있어 즉시 전송하지 못한 경우.
+     * writeToWatch()는 연결돼 있지 않으면 조용히 아무 일도 하지 않으므로(재시도 없음),
+     * 이 값으로 기억해뒀다가 재연결되면 [setupNus]에서 이어서 전송한다.
+     */
+    @Volatile
+    private var pendingStopSleepCommand = false
+
     private lateinit var sessionManager: SessionManager
     private lateinit var dataWriter: DataWriter
     private lateinit var reassembler: PacketReassembler
@@ -132,7 +140,14 @@ class WatchReceiverService : Service() {
         }
 
         if (intent?.action == Constants.ACTION_STOP_SLEEP_MEASUREMENT) {
-            writeToWatch(NusConstants.CMD_MEASUREMENT_CONTROL_STOP_SLEEP)
+            if (connectedDeviceAddress == null) {
+                // writeToWatch()는 미연결 시 조용히 no-op이라 명령이 유실된다 — 재연결되면
+                // setupNus()에서 이어서 보내도록 기억해둔다.
+                Log.w(TAG, "수면측정 종료 명령 — 현재 미연결 상태, 재연결되면 전송 예정")
+                pendingStopSleepCommand = true
+            } else {
+                writeToWatch(NusConstants.CMD_MEASUREMENT_CONTROL_STOP_SLEEP)
+            }
             return START_STICKY
         }
 
@@ -391,6 +406,11 @@ class WatchReceiverService : Service() {
             delay(PROBE_WINDOW_MS)
             if (connectedDeviceAddress == address) {
                 writeToWatch(NusConstants.CMD_SERVICE_RUNNING)
+                if (pendingStopSleepCommand) {
+                    Log.d(TAG, "재연결 완료 — 보류 중이던 수면측정 종료 명령 전송")
+                    writeToWatch(NusConstants.CMD_MEASUREMENT_CONTROL_STOP_SLEEP)
+                    pendingStopSleepCommand = false
+                }
             }
         }
         Log.d(TAG, "NUS 설정 완료, 데이터 수신 대기 중 (SERVICE_RUNNING은 프로브 윈도우 후 전송)")
