@@ -151,7 +151,13 @@ class WatchReceiverService : Service() {
             return START_STICKY
         }
 
-        startForeground()
+        if (!startForeground()) {
+            // START_STICKY로 시스템이 백그라운드에서 서비스를 재시작(intent=null)하면 Android 12+에서
+            // startForeground()가 거부된다(ForegroundServiceStartNotAllowedException). 포그라운드로 못 띄우면
+            // 계속 동작할 수 없으므로 종료한다 — 앱을 다시 열면 기존 흐름대로 서비스가 재시작된다.
+            stopSelf()
+            return START_NOT_STICKY
+        }
 
         val watch = WatchFinder.find(this)
         if (watch == null) {
@@ -426,7 +432,7 @@ class WatchReceiverService : Service() {
     // ── 포그라운드 알림 ───────────────────────────────────────────────────────
 
     @RequiresApi(Build.VERSION_CODES.O)
-    private fun startForeground() {
+    private fun startForeground(): Boolean {
         val channel = NotificationChannel(
             Constants.NOTIFICATION_CHANNEL_ID,
             Constants.NOTIFICATION_CHANNEL_NAME,
@@ -441,6 +447,12 @@ class WatchReceiverService : Service() {
             .setOngoing(true)
             .build()
 
-        startForeground(Constants.NOTIFICATION_ID, notification)
+        return try {
+            startForeground(Constants.NOTIFICATION_ID, notification)
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "startForeground 실패: ${e.message}")
+            false
+        }
     }
 }
