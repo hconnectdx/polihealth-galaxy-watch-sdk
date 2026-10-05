@@ -61,7 +61,7 @@ object PolihealthGalaxyWatchAndroidSdk {
      * @param autoUpload       측정 데이터를 [baseUrl] 로 자동 전송할지 여부. 기본 true.
      *                         false 면 서버 요청을 하나도 보내지 않으며, 앱은 [ServerSdkCallback.onSensorData]
      *                         로 받은 샘플을 직접 전송한다. 수면 종료 시 [ServerSdkCallback.onSleepFinished] 는
-     *                         sleepQuality = null 로 호출된다.
+     *                         sleepQuality = null, serverResponded = false 로 호출된다.
      */
     fun init(
         baseUrl: String,

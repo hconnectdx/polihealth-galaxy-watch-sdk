@@ -249,7 +249,7 @@ internal class SessionManager(
     private fun notifySleepStop(sessionId: String) {
         if (!HealthOnClient.autoUpload) {
             Log.d(TAG, "autoUpload=false — sleep/stop 전송 생략 (session=$sessionId)")
-            callback.onSleepFinished(sessionId, null)
+            callback.onSleepFinished(sessionId, null, serverResponded = false)
             return
         }
         try {
