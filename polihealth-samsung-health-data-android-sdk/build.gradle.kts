@@ -12,7 +12,7 @@ val localProperties = Properties().apply {
     if (file.exists()) load(FileInputStream(file))
 }
 
-val libVersion = "1.0.0"
+val libVersion = "1.0.1"
 
 android {
     namespace = "kr.co.hconnect.polihealth_samsung_health_data_android_sdk"
