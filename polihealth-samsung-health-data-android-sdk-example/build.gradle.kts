@@ -41,6 +41,8 @@ android {
 
 dependencies {
     implementation(project(":polihealth-samsung-health-data-android-sdk"))
+    implementation(libs.samsung.health.data.api) // [디버그] IntervalProbe 에서 직접 사용
+    implementation("org.jetbrains.kotlin:kotlin-parcelize-runtime:2.0.21") // 삼성헬스 API 런타임 요구
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.lifecycle.runtime.ktx)

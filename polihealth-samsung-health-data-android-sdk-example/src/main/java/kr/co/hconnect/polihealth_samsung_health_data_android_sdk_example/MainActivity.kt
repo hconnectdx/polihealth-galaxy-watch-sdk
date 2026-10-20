@@ -192,6 +192,15 @@ fun MainScreen() {
                 }
             }
 
+            HealthActionButton(
+                text = "[디버그] 수면 산소포화도·피부온도 간격 분석 (30일)",
+                modifier = Modifier.fillMaxWidth(),
+                color = Color(0xFF6A1B9A),
+                enabled = !loading,
+            ) {
+                runTask("간격 분석") { IntervalProbe.run(context) }
+            }
+
             HorizontalDivider()
 
             Text(
