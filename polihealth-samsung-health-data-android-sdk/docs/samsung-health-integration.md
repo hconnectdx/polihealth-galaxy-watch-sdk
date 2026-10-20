@@ -171,7 +171,9 @@ class AuthSamsungManager(private val store: HealthDataStore) {
 - 합계만 필요(걸음수 등): `DataType.XType.TOTAL.requestBuilder` + `store.aggregateData(requ
   (`STEPS`는 `readData` 자체가 없고 aggregate만 지원)
 - 시간 필터: `InstantTimeFilter.of(Instant, Instant)` 또는 `LocalTimeFilter.of(LocalDateTim
-- 최대 30일, 하루 단위로 반복 조회하는 날짜 윈도우 방식을 권장 (커서 페이징 없음)
+- 최대 30일, 하루 단위로 반복 조회하는 날짜 윈도우 방식을 사용
+- `readData`/`readChanges`는 `setPageSize`/`setPageToken`과 응답의 `pageToken`으로 페이지 조회를 지원한다 (1.1.0 `javap`로 확인). 현재 `readData` 계열 리더는 `pageToken`을 처리하지 않으므로, 하루 데이터가 한 페이지를 넘으면 누락될 수 있다(미검증)
+- 변경분 조회: `DataTypes.X.changedDataRequestBuilder.setChangeTimeFilter(InstantTimeFilter.of(since, until))` + `store.readChanges(request)`. 변경 시각 기준이며 `Change.changeType`이 `UPSERT`면 `upsertDataPoint`, `DELETE`면 `deleteDataUid`가 온다. 걸음수(`STEPS`)는 지원하지 않는다. 심박수는 `readHealthDataHeartRateChanges`로 제공
 
 
 ```kotlin
@@ -440,6 +442,7 @@ SDK 버전을 올리거나 지원 데이터 타입을 바꿀 때마다 이 표�
 | 날짜 | SDK 버전 | 변경 내용 | 관련 PR/이슈 |
 |---|---|---|---|
 | 2026-08-26 | 1.1.0 | 최초 연동. `checkHealthDataPermission`/`requestHealthDataPermission`/`readHealthDataSteps`/`readHealthDataHeartRate`/`readHealthDataBloodOxygen`/`readHealthDataSkinTemperature`를 `PolihealthSamsungHealthDataAndroidSdk`에 추가 (`health/` 패키지). polihealth-samsung-health-data-android-sdk 모듈 minSdk 24→29 상향. 로컬 maven repo(`libs/repo`)에 실물 `samsung-health-data-api-1.1.0.aar` 추가 후 실제 컴파일/빌드 성공 확인(`javap`로 실제 API 시그니처 검증, `ErrorCode` Int 타입 이슈 수정) | - |
+| 2026-10-20 | 1.1.0 (SDK 1.0.1) | `readHealthDataHeartRateChanges` 추가 (`readChanges` 기반 심박수 변경분 조회, 결과 타입 `HealthDataChanges`). 30일치 `readData` 심박수 조회가 실측 약 8초(480건)라 두 번째 동기화부터 변경분만 읽기 위함 | - |
 
 ## 14. 참고 자료
 

@@ -2,6 +2,7 @@ package kr.co.hconnect.polihealth_samsung_health_data_android_sdk
 
 import android.app.Activity
 import android.content.Context
+import java.time.Instant
 
 /**
  * 삼성헬스 Data SDK 연동의 내부 진입점.
@@ -28,6 +29,9 @@ internal class HealthDataManager(context: Context) {
 
     suspend fun readHeartRate(days: Int): List<Map<String, Any>> =
         HeartRateHealthDataReader(storeProvider.getStore()).readDays(days)
+
+    suspend fun readHeartRateChanges(since: Instant, until: Instant): HealthDataChanges =
+        HeartRateHealthDataReader(storeProvider.getStore()).readChanges(since, until)
 
     suspend fun readBloodOxygen(days: Int): List<Map<String, Any>> =
         BloodOxygenHealthDataReader(storeProvider.getStore()).readDays(days)

@@ -2,6 +2,7 @@ package kr.co.hconnect.polihealth_samsung_health_data_android_sdk
 
 import android.app.Activity
 import android.content.Context
+import java.time.Instant
 
 /**
  * polihealth-samsung-health-data-android-sdk 진입점.
@@ -54,6 +55,19 @@ object PolihealthSamsungHealthDataAndroidSdk {
     /** 최근 [days]일(최대 30일)의 심박수를 조회한다. */
     suspend fun readHealthDataHeartRate(context: Context, days: Int = 7): List<Map<String, Any>> =
         healthDataManager(context).readHeartRate(days)
+
+    /**
+     * [since]~[until] 사이에 추가·수정·삭제된 심박수만 조회한다(측정 시각이 아니라 변경 시각 기준).
+     *
+     * [HealthDataChanges.upserts] 항목의 키는 [readHealthDataHeartRate]와 같고 `uid`가 추가된다.
+     * 삼성헬스가 변경 이력을 얼마나 보관하는지는 정해져 있지 않으므로, 오래된 [since]로 조회하거나
+     * 조회가 실패하면 호출하는 쪽에서 [readHealthDataHeartRate]로 전체 조회해야 한다.
+     */
+    suspend fun readHealthDataHeartRateChanges(
+        context: Context,
+        since: Instant,
+        until: Instant = Instant.now(),
+    ): HealthDataChanges = healthDataManager(context).readHeartRateChanges(since, until)
 
     /** 최근 [days]일(최대 30일)의 혈중 산소포화도를 조회한다. */
     suspend fun readHealthDataBloodOxygen(context: Context, days: Int = 7): List<Map<String, Any>> =
