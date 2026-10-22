@@ -59,9 +59,22 @@ private const val PRIORITY_IDLE_CHECK_MS = 5_000L
  * 끊기는 경우는 대상이 아니라서, 이 서비스 레벨에서 별도로 재연결을 걸어준다.
  */
 private const val RECONNECT_DELAY_MS = 5_000L
+/** 측정 중이 아닐 때 연결이 안 된 채로 이 시간이 지나면 재시도를 멈추고 서비스를 내린다. */
+private const val GIVE_UP_AFTER_MS = 60_000L
 
 @SuppressLint("MissingPermission")
 class WatchReceiverService : Service() {
+
+    internal companion object {
+        /** 서비스가 살아 있는지 (onCreate ~ onDestroy). */
+        @Volatile
+        var isServiceAlive = false
+            private set
+
+        /** 지금 연결된 워치 주소. 연결 전이거나 끊기면 null. */
+        @Volatile
+        var currentDeviceAddress: String? = null
+    }
 
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
@@ -71,7 +84,12 @@ class WatchReceiverService : Service() {
      */
     private val bleDispatcher = Dispatchers.IO.limitedParallelism(1)
 
-    private var connectedDeviceAddress: String? = null
+    /** 지금 연결된 워치 주소. [PolihealthGalaxyWatchAndroidSdk.getConnectionStatus]가 읽을 수 있게 companion에 둔다. */
+    private var connectedDeviceAddress: String?
+        get() = currentDeviceAddress
+        set(value) {
+            currentDeviceAddress = value
+        }
 
     /** 현재 connection priority가 HIGH로 요청된 상태인지. */
     @Volatile
@@ -88,6 +106,12 @@ class WatchReceiverService : Service() {
     private var isIntentionalStop = false
 
     private var reconnectJob: Job? = null
+
+    /** 연속 재연결 시도 횟수 (연결되면 0). 로그용. */
+    private var reconnectAttempt = 0
+
+    /** 연결 안 된 상태가 [GIVE_UP_AFTER_MS] 동안 이어지면 서비스를 내리는 타이머. 연결되면 취소. */
+    private var giveUpJob: Job? = null
 
     /**
      * ACTION_STOP_SLEEP_MEASUREMENT를 받았을 때 BLE가 끊겨 있어 즉시 전송하지 못한 경우.
@@ -125,6 +149,7 @@ class WatchReceiverService : Service() {
         )
 
         HCBle.init(this)
+        isServiceAlive = true
     }
 
     @RequiresApi(Build.VERSION_CODES.O)
@@ -168,6 +193,8 @@ class WatchReceiverService : Service() {
         }
 
         connectWatch(watch.address)
+        // 첫 연결도 같은 기준으로 — 끝내 못 붙으면 서비스를 내린다
+        startGiveUpTimerIfNeeded()
 
         return START_STICKY
     }
@@ -178,6 +205,8 @@ class WatchReceiverService : Service() {
 
         isIntentionalStop = true
         reconnectJob?.cancel()
+        giveUpJob?.cancel()
+        PolihealthGalaxyWatchAndroidSdk.markStopped()
 
         if (::sessionManager.isInitialized && sessionManager.isRecording) {
             sessionManager.finishSession()
@@ -188,6 +217,7 @@ class WatchReceiverService : Service() {
 
         PolihealthGalaxyWatchAndroidSdk.getCallback()?.onDisconnected()
 
+        isServiceAlive = false
         serviceScope.cancel()
     }
 
@@ -213,6 +243,9 @@ class WatchReceiverService : Service() {
                 when (state) {
                     BLEState.STATE_CONNECTED -> {
                         connectedDeviceAddress = address
+                        reconnectAttempt = 0
+                        giveUpJob?.cancel()
+                        giveUpJob = null
                         Log.d(TAG, "워치 연결됨: $address")
                         // 선제 MTU 발사: EATT가 깔리기 전 레거시 bearer에서 교환을 시도.
                         // 성공하면 notify 경로 자체가 (MTU-3)B가 되어 프로브 없이 해결된다.
@@ -232,7 +265,8 @@ class WatchReceiverService : Service() {
                     BLEState.STATE_DISCONNECTED -> {
                         Log.d(TAG, "워치 연결 해제: $address (측정중=${sessionManager.isRecording}, 의도적 종료=$isIntentionalStop)")
 
-                        val shouldReconnect = !isIntentionalStop && sessionManager.isRecording
+                        // 사용자가 연동을 끄지 않았으면 다시 연결한다. 측정 중이 아니면 [GIVE_UP_AFTER_MS] 안에서만 시도한다.
+                        val shouldReconnect = !isIntentionalStop
 
                         // reassembler.reset() 과 finishSession() 은 반드시 bleDispatcher 위에서
                         // 순서대로 실행해야 한다. finishSession()을 콜백 스레드에서 직접 호출하면
@@ -251,6 +285,7 @@ class WatchReceiverService : Service() {
                         PolihealthGalaxyWatchAndroidSdk.getCallback()?.onDisconnected()
 
                         if (shouldReconnect) {
+                            startGiveUpTimerIfNeeded()
                             scheduleReconnect(address)
                         }
                     }
@@ -285,26 +320,54 @@ class WatchReceiverService : Service() {
     }
 
     /**
-     * 측정 도중 예기치 않게 끊긴 경우의 재연결 스케줄러.
+     * 연결이 끊기거나 연결에 실패했을 때의 재연결 스케줄러.
      *
      * HCBle의 자체 재시도(`connectionRetryInfoMap`)는 연결이 한 번 성공하면 지워지기 때문에
      * "연결된 뒤 도중에 끊기는 경우"는 대상이 아니다 — 이 함수가 그 빈틈을 메운다.
      *
-     * [RECONNECT_DELAY_MS] 후 [connectWatch]를 다시 호출하며, 그 시도가 또 실패해서
-     * `onConnState`가 다시 `STATE_DISCONNECTED`를 보고하면 그 콜백에서 이 함수가 다시
-     * 호출되어(재귀적으로) 자연스럽게 반복된다. 재연결에 성공하거나(STATE_CONNECTED),
-     * 서비스가 의도적으로 종료되거나(`isIntentionalStop`), 세션이 끝나면 멈춘다.
+     * [RECONNECT_DELAY_MS] 뒤 [connectWatch]를 다시 호출하고, 그 시도가 또 실패해 `onConnState`가
+     * 다시 `STATE_DISCONNECTED`를 보고하면 그 콜백에서 이 함수가 다시 호출되어 반복된다.
+     * 재연결에 성공하거나(STATE_CONNECTED), 서비스가 의도적으로 종료되거나(`isIntentionalStop`),
+     * 측정 중이 아닌 채로 [GIVE_UP_AFTER_MS]가 지나 [startGiveUpTimerIfNeeded]가 서비스를 내리면 멈춘다.
      */
     private fun scheduleReconnect(address: String) {
         reconnectJob?.cancel()
+        reconnectAttempt++
         reconnectJob = serviceScope.launch {
             delay(RECONNECT_DELAY_MS)
-            if (isIntentionalStop || !sessionManager.isRecording) {
-                Log.d(TAG, "재연결 취소 — 의도적 종료 또는 세션 종료됨")
+            if (isIntentionalStop) {
+                Log.d(TAG, "재연결 취소 — 의도적 종료")
                 return@launch
             }
-            Log.w(TAG, "측정 중 연결 끊김 — 재연결 시도: $address")
-            connectWatch(address)
+            // 매번 연결 대상을 다시 고른다 — 다른 워치가 연결돼 있거나 페어링 목록이 바뀌었을 수 있다.
+            val target = WatchFinder.find(this@WatchReceiverService)?.address ?: address
+            Log.w(TAG, "연결 끊김 — 재연결 시도 #$reconnectAttempt: $target")
+            connectWatch(target)
+        }
+    }
+
+    /**
+     * 연결이 안 된 상태가 [GIVE_UP_AFTER_MS] 동안 이어지면 재시도를 멈추고 서비스를 내린다.
+     * 측정 중이면 데이터가 끊기지 않게 계속 재시도하고, 측정이 끝난 뒤 다시 판단한다.
+     * 서비스가 내려가면 [PolihealthGalaxyWatchAndroidSdk.getConnectionStatus]는 serviceRunning=false 를 돌려준다.
+     */
+    private fun startGiveUpTimerIfNeeded() {
+        if (giveUpJob?.isActive == true) return
+        giveUpJob = serviceScope.launch {
+            while (true) {
+                delay(GIVE_UP_AFTER_MS)
+                if (isIntentionalStop || connectedDeviceAddress != null) return@launch
+                if (::sessionManager.isInitialized && sessionManager.isRecording) {
+                    Log.w(TAG, "${GIVE_UP_AFTER_MS}ms 동안 미연결이지만 측정 중 — 재시도 유지")
+                    continue
+                }
+                Log.w(TAG, "${GIVE_UP_AFTER_MS}ms 동안 워치에 연결하지 못함 — 재시도 중단, 서비스 종료")
+                PolihealthGalaxyWatchAndroidSdk.getCallback()?.onError("갤럭시워치에 연결하지 못했습니다. 연동을 다시 시작해 주세요.")
+                isIntentionalStop = true
+                reconnectJob?.cancel()
+                stopSelf()
+                return@launch
+            }
         }
     }
 
