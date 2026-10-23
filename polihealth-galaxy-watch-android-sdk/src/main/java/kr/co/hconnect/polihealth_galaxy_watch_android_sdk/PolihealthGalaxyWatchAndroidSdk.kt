@@ -1,9 +1,11 @@
 package kr.co.hconnect.polihealth_galaxy_watch_android_sdk
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.os.Build
 import androidx.annotation.RequiresApi
+import kr.co.hconnect.bluetooth_sdk_android_v2.HCBle
 import kr.co.hconnect.polihealth_galaxy_watch_android_sdk.api.HealthOnClient
 import kr.co.hconnect.polihealth_galaxy_watch_android_sdk.callback.ServerSdkCallback
 import kr.co.hconnect.polihealth_galaxy_watch_android_sdk.service.WatchReceiverService
@@ -110,6 +112,43 @@ object PolihealthGalaxyWatchAndroidSdk {
 
     /** SDK가 실행 중인지 여부. */
     fun isRunning(): Boolean = running
+
+    /** 내부용: 서비스가 스스로 내려갔을 때(연결 실패 등) 실행 상태를 맞춘다. */
+    internal fun markStopped() {
+        running = false
+    }
+
+    /**
+     * 지금 이 순간의 워치 연결 상태를 조회한다. 워치와 통신하지 않고 폰 쪽 상태만 확인한다.
+     *
+     * 다음이 모두 맞을 때만 `connected = true`:
+     *  1. 워치 수신 서비스가 살아 있고
+     *  2. 서비스가 연결한 워치 주소가 있고
+     *  3. 그 주소의 GATT 연결 객체가 있고
+     *  4. OS도 그 기기를 GATT 연결됨으로 본다
+     *
+     * OS 연결 상태(4)만으로는 판단하지 않는다 — 갤럭시 웨어러블 앱의 연결까지 섞여 나오기 때문이다.
+     * 블루투스는 연결돼 있지만 워치 앱이 멈춘 경우는 구분하지 못한다.
+     */
+    @SuppressLint("MissingPermission")
+    fun getConnectionStatus(): WatchConnectionStatus {
+        val serviceRunning = WatchReceiverService.isServiceAlive
+        val address = WatchReceiverService.currentDeviceAddress
+        if (!serviceRunning || address == null) {
+            return WatchConnectionStatus(serviceRunning, connected = false, deviceAddress = null, deviceName = null)
+        }
+        val device = runCatching { HCBle.getDevice(address) }.getOrNull()
+        val connected = device != null &&
+                HCBle.getGattController(address) != null &&
+                runCatching { HCBle.isConnected(device) }.getOrDefault(false)
+        val name = if (connected) runCatching { device?.name }.getOrNull() else null
+        return WatchConnectionStatus(
+            serviceRunning = true,
+            connected = connected,
+            deviceAddress = if (connected) address else null,
+            deviceName = name,
+        )
+    }
 
     /**
      * 워치에 수면측정 종료 명령(`MEASUREMENT_CONTROL:STOP_SLEEP`)을 전송한다.
